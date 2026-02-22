@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/contexts/AuthContext'
 import {
     Dialog,
     DialogContent,
@@ -22,6 +23,7 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
     const [role, setRole] = useState('developer')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const { user } = useAuth()
 
     const handleInvite = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -29,6 +31,17 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
         setError(null)
 
         try {
+            // RBAC: Verify user permission
+            const { data: userRole } = await supabase
+                .from('project_members')
+                .select('project_role')
+                .eq('project_id', projectId)
+                .eq('user_id', user?.id)
+                .single()
+
+            if (!userRole || !['admin', 'pm'].includes(userRole.project_role)) {
+                throw new Error('You do not have permission to invite members.')
+            }
             // 1. Find the user by their email in the profiles table
             const { data: profile, error: profileError } = await supabase
                 .from('profiles')

@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { getRepoContributors } from '../lib/github'
 import { InviteMemberModal } from '../components/projects/InviteMemberModal'
+import { EditMemberRoleModal } from '../components/projects/EditMemberRoleModal'
+import { EditProjectModal } from '../components/projects/EditProjectModal'
 import { CreateBugModal } from '../components/projects/CreateBugModal'
-import { Github, Users, Bug, AlertCircle, ArrowLeft, ExternalLink, Columns } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Github, Users, Bug, AlertCircle, ArrowLeft, Trash2, Columns, ExternalLink } from 'lucide-react'
 
 interface Project {
     id: string
     name: string
     project_code: string
     description: string
+    created_by: string
     github_repo_url: string
     github_repo: string
     github_owner: string
@@ -31,6 +35,7 @@ interface Project {
 
 export function ProjectDashboard() {
     const { id } = useParams<{ id: string }>()
+    const navigate = useNavigate()
     const { user, session } = useAuth()
     const [project, setProject] = useState<Project | null>(null)
     const [contributors, setContributors] = useState<any[]>([])
@@ -95,6 +100,31 @@ export function ProjectDashboard() {
             })
     }
 
+    const handleDeleteProject = async () => {
+        if (!project || !user) return
+
+        const confirmed = window.confirm(
+            `Are you sure you want to delete "${project.name}"? This action is permanent and will remove all associated bugs and data.`
+        )
+
+        if (!confirmed) return
+
+        setLoading(true)
+        try {
+            const { error } = await supabase
+                .from('projects')
+                .delete()
+                .eq('id', project.id)
+
+            if (error) throw error
+
+            navigate('/')
+        } catch (err: any) {
+            alert(err.message)
+            setLoading(false)
+        }
+    }
+
     if (loading) {
         return (
             <div className="animate-pulse space-y-6">
@@ -120,27 +150,55 @@ export function ProjectDashboard() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex items-center gap-4">
-                <Link to="/" className="p-2 -ml-2 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors">
-                    <ArrowLeft className="h-5 w-5" />
-                </Link>
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-3">
-                        {project.name}
-                        <span className="text-sm font-mono bg-zinc-800 text-zinc-300 px-2 py-1 rounded align-middle">
-                            {project.project_code}
-                        </span>
-                    </h1>
-                    <a
-                        href={project.github_repo_url || `https://github.com/${project.github_owner}/${project.github_repo}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-2 text-zinc-400 hover:text-blue-400 mt-2 text-sm transition-colors"
-                    >
-                        <Github className="h-4 w-4" />
-                        {project.github_owner}/{project.github_repo}
-                    </a>
+            <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                    <Link to="/" className="p-2 -ml-2 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors">
+                        <ArrowLeft className="h-5 w-5" />
+                    </Link>
+                    <div>
+                        <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-3">
+                            {project.name}
+                            <span className="text-sm font-mono bg-zinc-800 text-zinc-300 px-2 py-1 rounded align-middle">
+                                {project.project_code}
+                            </span>
+                        </h1>
+                        <a
+                            href={project.github_repo_url || `https://github.com/${project.github_owner}/${project.github_repo}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-2 text-zinc-400 hover:text-blue-400 mt-2 text-sm transition-colors"
+                        >
+                            <Github className="h-4 w-4" />
+                            {project.github_owner}/{project.github_repo}
+                        </a>
+                    </div>
                 </div>
+
+                {/* Project Actions - Only for admins/creators */}
+                {(() => {
+                    const userMember = project.project_members?.find(m => m.profiles.id === user?.id);
+                    const userRole = userMember?.project_role;
+                    const canManageProject = ['admin', 'pm'].includes(userRole || '') || project.created_by === user?.id;
+
+                    return canManageProject && (
+                        <div className="flex items-center gap-2">
+                            <EditProjectModal
+                                project={project}
+                                userRole={userRole}
+                                onSuccess={handleAssignSuccess}
+                            />
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleDeleteProject}
+                                className="bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20 gap-2 transition-all h-9"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                                Delete Project
+                            </Button>
+                        </div>
+                    );
+                })()}
             </div>
 
             {/* GitHub Stats Cards */}
@@ -180,13 +238,19 @@ export function ProjectDashboard() {
                                 <Bug className="h-4 w-4 text-red-400" />
                                 Recent Bugs Tracker
                             </h2>
-                            {project.project_members?.some(m => m.profiles.id === user?.id) && (
-                                <CreateBugModal
-                                    projectId={project.id}
-                                    projectCode={project.project_code}
-                                    onSuccess={handleAssignSuccess}
-                                />
-                            )}
+                            {(() => {
+                                const userMember = project.project_members?.find(m => m.profiles.id === user?.id);
+                                const userRole = userMember?.project_role;
+                                const canCreateBug = ['admin', 'pm', 'tester'].includes(userRole || '');
+
+                                return canCreateBug && (
+                                    <CreateBugModal
+                                        projectId={project.id}
+                                        projectCode={project.project_code}
+                                        onSuccess={handleAssignSuccess}
+                                    />
+                                );
+                            })()}
                         </div>
                         <div className="flex-1 p-8 flex flex-col items-center justify-center text-zinc-500 bg-zinc-950/20">
                             <Columns className="h-12 w-12 mb-4 text-blue-500/50" />
@@ -229,9 +293,22 @@ export function ProjectDashboard() {
                                             </div>
                                         )}
                                         <div className="flex-1 min-w-0">
-                                            <div className="text-sm text-white font-medium truncate flex items-center gap-2">
-                                                {member.profiles.display_name}
-                                                {member.profiles.id === user?.id && <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded uppercase">You</span>}
+                                            <div className="text-sm text-white font-medium truncate flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2 truncate">
+                                                    {member.profiles.display_name}
+                                                    {member.profiles.id === user?.id && <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded uppercase flex-shrink-0">You</span>}
+                                                </div>
+
+                                                {/* Edit Role Button - Only for admins/pms, and not for themselves if they want to avoid self-demotion (optional, but let's allow it for consistency) */}
+                                                {project.project_members?.some(m => m.profiles.id === user?.id && ['admin', 'pm'].includes(m.project_role)) && (
+                                                    <EditMemberRoleModal
+                                                        projectId={project.id}
+                                                        memberId={member.profiles.id}
+                                                        memberName={member.profiles.display_name}
+                                                        currentRole={member.project_role}
+                                                        onSuccess={handleAssignSuccess}
+                                                    />
+                                                )}
                                             </div>
                                             <div className="text-xs text-zinc-500 uppercase tracking-wider">{member.project_role}</div>
                                         </div>

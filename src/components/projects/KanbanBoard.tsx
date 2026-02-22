@@ -8,6 +8,7 @@ import { BugDetailsModal } from './BugDetailsModal'
 interface KanbanBoardProps {
     projectId: string
     refreshTrigger?: number
+    userRole?: string
 }
 
 const COLUMNS = [
@@ -18,7 +19,7 @@ const COLUMNS = [
     { id: 'closed', title: 'Closed', color: 'border-purple-500' },
 ]
 
-export function KanbanBoard({ projectId, refreshTrigger = 0 }: KanbanBoardProps) {
+export function KanbanBoard({ projectId, refreshTrigger = 0, userRole }: KanbanBoardProps) {
     const [bugs, setBugs] = useState<BugType[]>([])
     const [loading, setLoading] = useState(true)
     const [selectedBugId, setSelectedBugId] = useState<string | null>(null)
@@ -66,6 +67,12 @@ export function KanbanBoard({ projectId, refreshTrigger = 0 }: KanbanBoardProps)
 
         if (!destination) return
         if (destination.droppableId === source.droppableId && destination.index === source.index) return
+
+        // RBAC: Only admin, pm, tester, and developer can move bugs
+        if (!userRole || userRole === 'viewer') {
+            console.warn('Viewers cannot update bug status')
+            return
+        }
 
         const draggedBug = bugs.find(b => b.id === draggableId)
         if (!draggedBug) return
@@ -147,6 +154,7 @@ export function KanbanBoard({ projectId, refreshTrigger = 0 }: KanbanBoardProps)
             <BugDetailsModal
                 bugId={selectedBugId}
                 projectId={projectId}
+                userRole={userRole}
                 onClose={() => setSelectedBugId(null)}
                 onUpdate={loadBugs}
             />
