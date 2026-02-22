@@ -1,0 +1,5 @@
+src/App.tsx(1,1): error TS6133: 'React' is declared but its value is never read.
+src/components/layout/AppLayout.tsx(1,1): error TS6133: 'React' is declared but its value is never read.
+src/contexts/AuthContext.tsx(2,10): error TS1484: 'Session' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/contexts/AuthContext.tsx(2,19): error TS1484: 'User' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/pages/Dashboard.tsx(1,8): error TS6133: 'React' is declared but its value is never read.

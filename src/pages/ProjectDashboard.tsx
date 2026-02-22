@@ -1,0 +1,230 @@
+import { useEffect, useState } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
+import { getRepoContributors } from '../lib/github'
+import { Github, Users, Bug, AlertCircle, ArrowLeft, ExternalLink } from 'lucide-react'
+
+interface Project {
+    id: string
+    name: string
+    project_code: string
+    description: string
+    github_repo_url: string
+    github_repo: string
+    github_owner: string
+    github_details: any
+    created_at: string
+    project_members?: Array<{
+        project_role: string
+        profiles: {
+            id: string
+            display_name: string
+            avatar_url: string
+            github_username: string
+            email: string
+        }
+    }>
+}
+
+export function ProjectDashboard() {
+    const { id } = useParams<{ id: string }>()
+    const { user, session } = useAuth()
+    const [project, setProject] = useState<Project | null>(null)
+    const [contributors, setContributors] = useState<any[]>([])
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        async function loadProject() {
+            if (!id || !user) return
+
+            const { data, error } = await supabase
+                .from('projects')
+                .select(`
+                    *,
+                    project_members (
+                        project_role,
+                        profiles (
+                            id,
+                            display_name,
+                            avatar_url,
+                            github_username,
+                            email
+                        )
+                    )
+                `)
+                .eq('id', id)
+                .single()
+
+            if (data && !error) {
+                setProject(data)
+                if (session?.provider_token) {
+                    const contribs = await getRepoContributors(data.github_owner, data.github_repo, session.provider_token)
+                    setContributors(contribs)
+                }
+            }
+            setLoading(false)
+        }
+
+        loadProject()
+    }, [id, user])
+
+    if (loading) {
+        return (
+            <div className="animate-pulse space-y-6">
+                <div className="h-8 bg-zinc-900 rounded w-1/4"></div>
+                <div className="h-32 bg-zinc-900 rounded-xl"></div>
+            </div>
+        )
+    }
+
+    if (!project) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[400px] text-zinc-500">
+                <AlertCircle className="h-12 w-12 mb-4 text-red-500/50" />
+                <h2 className="text-xl text-white mb-2">Project not found</h2>
+                <p>This project may have been deleted or you don't have access.</p>
+                <Link to="/" className="mt-6 text-blue-500 hover:underline">
+                    Return to Dashboard
+                </Link>
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="flex items-center gap-4">
+                <Link to="/" className="p-2 -ml-2 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors">
+                    <ArrowLeft className="h-5 w-5" />
+                </Link>
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-3">
+                        {project.name}
+                        <span className="text-sm font-mono bg-zinc-800 text-zinc-300 px-2 py-1 rounded align-middle">
+                            {project.project_code}
+                        </span>
+                    </h1>
+                    <a
+                        href={project.github_repo_url || `https://github.com/${project.github_owner}/${project.github_repo}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-2 text-zinc-400 hover:text-blue-400 mt-2 text-sm transition-colors"
+                    >
+                        <Github className="h-4 w-4" />
+                        {project.github_owner}/{project.github_repo}
+                    </a>
+                </div>
+            </div>
+
+            {/* GitHub Stats Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4">
+                    <div className="text-zinc-500 text-sm mb-1">Stars</div>
+                    <div className="text-2xl font-semibold text-white">
+                        {project.github_details?.stars || 0}
+                    </div>
+                </div>
+                <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4">
+                    <div className="text-zinc-500 text-sm mb-1">Forks</div>
+                    <div className="text-2xl font-semibold text-white">
+                        {project.github_details?.forks || 0}
+                    </div>
+                </div>
+                <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4">
+                    <div className="text-zinc-500 text-sm mb-1">Open GitHub Issues</div>
+                    <div className="text-2xl font-semibold text-white">
+                        {project.github_details?.openIssues || 0}
+                    </div>
+                </div>
+                <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4">
+                    <div className="text-zinc-500 text-sm mb-1">Language</div>
+                    <div className="text-2xl font-semibold text-white truncate">
+                        {project.github_details?.language || 'N/A'}
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4">
+                {/* Main Content Area */}
+                <div className="col-span-2 space-y-6">
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden flex flex-col min-h-[300px]">
+                        <div className="p-4 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/80">
+                            <h2 className="font-semibold text-white flex items-center gap-2">
+                                <Bug className="h-4 w-4 text-red-400" />
+                                Recent Bugs Tracker
+                            </h2>
+                        </div>
+                        <div className="flex-1 p-8 flex flex-col items-center justify-center text-zinc-500 bg-zinc-950/20">
+                            <Bug className="h-10 w-10 mb-4 opacity-20" />
+                            <p>No bugs reported yet.</p>
+                            <p className="text-sm">Bugs linked to this project will appear here.</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* App Team Members Sidebar */}
+                <div className="space-y-6">
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+                        <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
+                            <h2 className="font-semibold text-white flex items-center gap-2">
+                                <Users className="h-4 w-4" />
+                                App Team Members
+                            </h2>
+                        </div>
+                        <div className="p-4">
+                            <div className="space-y-4">
+                                {project.project_members?.map((member, i) => (
+                                    <div key={i} className="flex items-center gap-3">
+                                        {member.profiles.avatar_url ? (
+                                            <img src={member.profiles.avatar_url} alt="avatar" className="h-8 w-8 rounded-full border border-zinc-700" />
+                                        ) : (
+                                            <div className="h-8 w-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center font-semibold text-xs border border-blue-500/30">
+                                                {member.profiles.display_name?.charAt(0) || '?'}
+                                            </div>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-sm text-white font-medium truncate flex items-center gap-2">
+                                                {member.profiles.display_name}
+                                                {member.profiles.id === user?.id && <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded uppercase">You</span>}
+                                            </div>
+                                            <div className="text-xs text-zinc-500 uppercase tracking-wider">{member.project_role}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* GitHub Contributors Sidebar */}
+                    {contributors.length > 0 && (
+                        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+                            <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
+                                <h2 className="font-semibold text-white flex items-center gap-2">
+                                    <Github className="h-4 w-4" />
+                                    Top Contributors
+                                </h2>
+                            </div>
+                            <div className="p-4">
+                                <div className="space-y-4">
+                                    {contributors.map((c, i) => (
+                                        <a key={i} href={c.html_url} target="_blank" rel="noreferrer" className="flex items-center gap-3 group">
+                                            <img src={c.avatar_url} alt="avatar" className="h-8 w-8 rounded-full border border-zinc-700 group-hover:border-zinc-500 transition-colors" />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-sm text-zinc-300 font-medium truncate group-hover:text-blue-400 transition-colors flex justify-between items-center">
+                                                    @{c.login}
+                                                    <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                </div>
+                                                <div className="text-xs text-zinc-500">{c.contributions} commits</div>
+                                            </div>
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
+}
