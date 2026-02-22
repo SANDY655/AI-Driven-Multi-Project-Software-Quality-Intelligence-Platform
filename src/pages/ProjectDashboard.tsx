@@ -3,7 +3,9 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { getRepoContributors } from '../lib/github'
-import { Github, Users, Bug, AlertCircle, ArrowLeft, ExternalLink } from 'lucide-react'
+import { InviteMemberModal } from '../components/projects/InviteMemberModal'
+import { CreateBugModal } from '../components/projects/CreateBugModal'
+import { Github, Users, Bug, AlertCircle, ArrowLeft, ExternalLink, Columns } from 'lucide-react'
 
 interface Project {
     id: string
@@ -58,16 +60,40 @@ export function ProjectDashboard() {
 
             if (data && !error) {
                 setProject(data)
-                if (session?.provider_token) {
-                    const contribs = await getRepoContributors(data.github_owner, data.github_repo, session.provider_token)
-                    setContributors(contribs)
-                }
+                // Fetch contributors even without a token (works for public repos)
+                const contribs = await getRepoContributors(data.github_owner, data.github_repo, session?.provider_token || undefined)
+                setContributors(contribs)
             }
             setLoading(false)
         }
 
         loadProject()
     }, [id, user])
+
+    const handleAssignSuccess = () => {
+        // Reload project data to show new member
+        if (!id || !user) return
+        supabase
+            .from('projects')
+            .select(`
+                *,
+                project_members (
+                    project_role,
+                    profiles (
+                        id,
+                        display_name,
+                        avatar_url,
+                        github_username,
+                        email
+                    )
+                )
+            `)
+            .eq('id', id)
+            .single()
+            .then(({ data }) => {
+                if (data) setProject(data)
+            })
+    }
 
     if (loading) {
         return (
@@ -154,11 +180,27 @@ export function ProjectDashboard() {
                                 <Bug className="h-4 w-4 text-red-400" />
                                 Recent Bugs Tracker
                             </h2>
+                            {project.project_members?.some(m => m.profiles.id === user?.id) && (
+                                <CreateBugModal
+                                    projectId={project.id}
+                                    projectCode={project.project_code}
+                                    onSuccess={handleAssignSuccess}
+                                />
+                            )}
                         </div>
                         <div className="flex-1 p-8 flex flex-col items-center justify-center text-zinc-500 bg-zinc-950/20">
-                            <Bug className="h-10 w-10 mb-4 opacity-20" />
-                            <p>No bugs reported yet.</p>
-                            <p className="text-sm">Bugs linked to this project will appear here.</p>
+                            <Columns className="h-12 w-12 mb-4 text-blue-500/50" />
+                            <h3 className="text-lg font-medium text-white mb-2">Kanban Board</h3>
+                            <p className="text-center max-w-sm mb-6">
+                                View and manage all bugs for this project in the dedicated Kanban Board view. Track progress from Open to Closed.
+                            </p>
+                            <Link
+                                to={`/projects/${project.id}/board`}
+                                className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 disabled:pointer-events-none disabled:opacity-50 bg-blue-600 text-white shadow hover:bg-blue-600/90 h-9 px-4 py-2 gap-2"
+                            >
+                                <Columns className="h-4 w-4" />
+                                Open Kanban Board
+                            </Link>
                         </div>
                     </div>
                 </div>
@@ -171,6 +213,9 @@ export function ProjectDashboard() {
                                 <Users className="h-4 w-4" />
                                 App Team Members
                             </h2>
+                            {project.project_members?.some(m => m.profiles.id === user?.id && ['admin', 'pm'].includes(m.project_role)) && (
+                                <InviteMemberModal projectId={project.id} onSuccess={handleAssignSuccess} />
+                            )}
                         </div>
                         <div className="p-4">
                             <div className="space-y-4">

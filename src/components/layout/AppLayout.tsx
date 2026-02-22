@@ -19,9 +19,9 @@ export function AppLayout() {
     }
 
     return (
-        <div className="min-h-screen flex bg-zinc-950 text-zinc-50">
+        <div className="h-screen w-full flex overflow-hidden bg-zinc-950 text-zinc-50">
             {/* Sidebar */}
-            <aside className="w-64 border-r border-zinc-800 bg-zinc-900/50 flex flex-col">
+            <aside className="w-64 flex-shrink-0 border-r border-zinc-800 bg-zinc-900/50 flex flex-col z-10 relative">
                 <div className="p-6 flex items-center gap-2 border-b border-zinc-800">
                     <Bug className="h-6 w-6 text-blue-500" />
                     <span className="font-semibold text-lg tracking-tight">Tracker</span>
@@ -50,14 +50,14 @@ export function AppLayout() {
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 flex flex-col">
-                <header className="h-16 border-b border-zinc-800 bg-zinc-950/50 flex items-center px-8 justify-between">
+            <main className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
+                <header className="h-16 flex-shrink-0 border-b border-zinc-800 bg-zinc-950/50 flex items-center px-8 justify-between">
                     <h2 className="text-lg font-medium text-zinc-200">Dashboard</h2>
                     <div className="flex items-center gap-4">
                         <span className="text-sm text-zinc-400">{user.email}</span>
                     </div>
                 </header>
-                <div className="p-8 flex-1 overflow-auto">
+                <div className="p-8 flex-1 overflow-y-auto overflow-x-hidden min-h-0 relative">
                     <Outlet />
                 </div>
             </main>

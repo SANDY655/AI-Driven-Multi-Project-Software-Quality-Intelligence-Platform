@@ -55,13 +55,8 @@ export function CreateProjectModal({ onSuccess }: { onSuccess: () => void }) {
             const repoInfo = extractOwnerAndRepo(values.githubUrl)
             if (!repoInfo) throw new Error('Invalid GitHub repository URL format.')
 
-            // We need the provider_token from the session to call the GitHub API
-            // Note: If they logged in with email, provider_token will be missing. 
-            // For now, we assume they logged in with GitHub as per the flow.
+            // We pass the token if the user logged in via GitHub, otherwise undefined (works for public repos)
             const providerToken = session.provider_token
-            if (!providerToken) {
-                throw new Error('No GitHub access token found. Did you log in with GitHub?')
-            }
 
             // 2. Fetch repo details from GitHub
             const details = await getRepoDetails(providerToken, repoInfo.owner, repoInfo.repo)

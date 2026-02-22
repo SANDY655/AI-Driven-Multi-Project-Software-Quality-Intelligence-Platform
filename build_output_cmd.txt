@@ -1,0 +1,11 @@
+
+> capstone@0.0.0 build
+> tsc -b && vite build
+
+src/components/projects/BugCard.tsx(2,17): error TS6133: 'BugIcon' is declared but its value is never read.
+src/components/projects/BugCard.tsx(2,26): error TS6133: 'AlertCircle' is declared but its value is never read.
+src/components/projects/BugCard.tsx(2,46): error TS6133: 'MessageSquare' is declared but its value is never read.
+src/components/projects/BugCard.tsx(2,61): error TS6133: 'Paperclip' is declared but its value is never read.
+src/components/projects/KanbanBoard.tsx(2,38): error TS1484: 'DropResult' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/components/projects/KanbanBoard.tsx(5,10): error TS1484: 'Bug' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/components/projects/KanbanBoard.tsx(31,124): error TS6133: 'payload' is declared but its value is never read.

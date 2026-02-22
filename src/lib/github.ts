@@ -1,10 +1,7 @@
 import { Octokit } from '@octokit/rest'
 
-// We will use the user's GitHub provider token to authenticate Octokit
-export const getGitHubClient = (providerToken: string) => {
-    return new Octokit({
-        auth: providerToken,
-    })
+export const getGitHubClient = (providerToken?: string) => {
+    return new Octokit(providerToken ? { auth: providerToken } : {})
 }
 
 export const extractOwnerAndRepo = (url: string) => {
@@ -24,8 +21,8 @@ export const extractOwnerAndRepo = (url: string) => {
     return null
 }
 
-export const getRepoDetails = async (providerToken: string, owner: string, repo: string) => {
-    const octokit = getGitHubClient(providerToken)
+export const getRepoDetails = async (providerToken: string | undefined | null, owner: string, repo: string) => {
+    const octokit = getGitHubClient(providerToken || undefined)
 
     const [repoData, branchesData] = await Promise.all([
         octokit.rest.repos.get({ owner, repo }),
