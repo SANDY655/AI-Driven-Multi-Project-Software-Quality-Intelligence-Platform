@@ -30,6 +30,13 @@ const priorityColors: Record<string, string> = {
     P3: 'bg-blue-500/20 text-blue-500 border-blue-500/30',
 }
 
+const priorityLabels: Record<string, string> = {
+    P0: 'Critical',
+    P1: 'High',
+    P2: 'Medium',
+    P3: 'Low',
+}
+
 export function BugCard({ bug, index, onClick }: BugCardProps) {
     return (
         <Draggable draggableId={bug.id} index={index}>
@@ -45,7 +52,7 @@ export function BugCard({ bug, index, onClick }: BugCardProps) {
                     <div className="flex justify-between items-start mb-2">
                         <span className="text-xs font-mono text-zinc-500">{bug.bug_display_id}</span>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${priorityColors[bug.priority] || priorityColors.P2}`}>
-                            {bug.priority}
+                            {priorityLabels[bug.priority] || bug.priority}
                         </span>
                     </div>
 

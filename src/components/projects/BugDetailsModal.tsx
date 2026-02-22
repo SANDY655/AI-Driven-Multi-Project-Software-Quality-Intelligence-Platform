@@ -20,6 +20,21 @@ interface BugDetailsModalProps {
     onUpdate: () => void
 }
 
+const PRIORITY_LABELS: Record<string, string> = {
+    P0: 'Critical',
+    P1: 'High',
+    P2: 'Medium',
+    P3: 'Low'
+}
+
+const STATUS_LABELS: Record<string, string> = {
+    open: 'Open',
+    in_progress: 'In Progress',
+    in_review: 'In Review',
+    resolved: 'Resolved',
+    closed: 'Closed'
+}
+
 export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, onClose, onUpdate }: BugDetailsModalProps) {
     const { user } = useAuth()
     const [bug, setBug] = useState<any>(null)
@@ -37,6 +52,18 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
     const canEditStatus = ['admin', 'pm', 'tester', 'developer'].includes(currentUserRole || '')
     const canPostComment = true // All project members can comment usually
     const canDelete = ['admin', 'pm'].includes(currentUserRole || '')
+
+    const formatValue = (action: string, value: string | null) => {
+        if (!value || value === 'null' || value === 'None') return 'None'
+        if (action.includes('status')) return STATUS_LABELS[value] || value
+        if (action.includes('priority')) return PRIORITY_LABELS[value] || value
+        if (action.includes('severity')) return value.charAt(0).toUpperCase() + value.slice(1)
+        if (action.includes('assigned')) {
+            const member = members.find(m => m.id === value)
+            return member?.display_name || 'User'
+        }
+        return value
+    }
 
     useEffect(() => {
         if (!bugId) return
@@ -438,9 +465,9 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
                                                         </div>
 
                                                         <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-lg p-2 mt-1.5 group-hover:border-zinc-700/50 transition-colors">
-                                                            <span className="text-zinc-500 italic">{act.old_value || 'None'}</span>
+                                                            <span className="text-zinc-500 italic">{formatValue(act.action, act.old_value)}</span>
                                                             <span className="mx-2 text-zinc-700 font-mono">&rarr;</span>
-                                                            <span className="text-zinc-200 font-medium">{act.new_value || 'None'}</span>
+                                                            <span className="text-zinc-200 font-medium">{formatValue(act.action, act.new_value)}</span>
                                                         </div>
 
                                                         <div className="text-[10px] text-zinc-600 mt-2 flex items-center gap-1 font-medium">
