@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { getRepoContributors } from '../lib/github'
+import { getRepoContributors, getRepoCollaborators } from '../lib/github'
 import { InviteMemberModal } from '../components/projects/InviteMemberModal'
 import { EditMemberRoleModal } from '../components/projects/EditMemberRoleModal'
 import { EditProjectModal } from '../components/projects/EditProjectModal'
@@ -39,6 +39,7 @@ export function ProjectDashboard() {
     const { user, session } = useAuth()
     const [project, setProject] = useState<Project | null>(null)
     const [contributors, setContributors] = useState<any[]>([])
+    const [collaborators, setCollaborators] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
@@ -65,9 +66,14 @@ export function ProjectDashboard() {
 
             if (data && !error) {
                 setProject(data)
-                // Fetch contributors even without a token (works for public repos)
-                const contribs = await getRepoContributors(data.github_owner, data.github_repo, session?.provider_token || undefined)
+                // Fetch contributors and collaborators
+                const token = session?.provider_token || undefined
+                const [contribs, collabs] = await Promise.all([
+                    getRepoContributors(data.github_owner, data.github_repo, token),
+                    getRepoCollaborators(data.github_owner, data.github_repo, token)
+                ])
                 setContributors(contribs)
+                setCollaborators(collabs)
             }
             setLoading(false)
         }
@@ -338,6 +344,34 @@ export function ProjectDashboard() {
                                                     <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                                                 </div>
                                                 <div className="text-xs text-zinc-500">{c.contributions} commits</div>
+                                            </div>
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* GitHub Collaborators Sidebar */}
+                    {collaborators.length > 0 && (
+                        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden mt-6">
+                            <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
+                                <h2 className="font-semibold text-white flex items-center gap-2">
+                                    <Github className="h-4 w-4" />
+                                    GitHub Collaborators
+                                </h2>
+                            </div>
+                            <div className="p-4">
+                                <div className="space-y-4">
+                                    {collaborators.map((c, i) => (
+                                        <a key={i} href={c.html_url} target="_blank" rel="noreferrer" className="flex items-center gap-3 group">
+                                            <img src={c.avatar_url} alt="avatar" className="h-8 w-8 rounded-full border border-zinc-700 group-hover:border-zinc-500 transition-colors" />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-sm text-zinc-300 font-medium truncate group-hover:text-blue-400 transition-colors flex justify-between items-center">
+                                                    @{c.login}
+                                                    <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                </div>
+                                                <div className="text-xs text-zinc-500">{c.role_name || 'Collaborator'}</div>
                                             </div>
                                         </a>
                                     ))}

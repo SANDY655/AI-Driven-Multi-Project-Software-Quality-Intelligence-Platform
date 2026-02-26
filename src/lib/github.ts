@@ -57,3 +57,20 @@ export const getRepoContributors = async (owner: string, repo: string, token?: s
         return []
     }
 }
+
+export const getRepoCollaborators = async (owner: string, repo: string, token?: string) => {
+    try {
+        if (!token) return [] // Need token for collaborators usually, especially for private repos
+        const octokit = new Octokit({ auth: token })
+        const { data } = await octokit.rest.repos.listCollaborators({ owner, repo, per_page: 10 })
+        return data.map(c => ({
+            login: c.login,
+            avatar_url: c.avatar_url,
+            html_url: c.html_url,
+            role_name: c.role_name
+        }))
+    } catch (e: any) {
+        console.error('Failed to fetch collaborators:', e.message)
+        return []
+    }
+}
