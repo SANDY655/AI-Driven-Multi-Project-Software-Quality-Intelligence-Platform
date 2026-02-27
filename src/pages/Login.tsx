@@ -31,6 +31,9 @@ export function Login() {
     const handleGithubLogin = async () => {
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'github',
+            options: {
+                scopes: 'repo',
+            },
         })
         if (error) setError(error.message)
     }

@@ -6,6 +6,8 @@ import { Login } from './pages/Login'
 import { Register } from './pages/Register'
 import { Dashboard } from './pages/Dashboard'
 import { ProjectDashboard } from './pages/ProjectDashboard'
+import { KanbanPage } from './pages/KanbanPage'
+import { TaskKanbanPage } from './pages/TaskKanbanPage'
 
 function App() {
   return (
@@ -20,6 +22,8 @@ function App() {
           <Route element={<AppLayout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/projects/:id" element={<ProjectDashboard />} />
+            <Route path="/projects/:id/board" element={<KanbanPage />} />
+            <Route path="/projects/:id/tasks" element={<TaskKanbanPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

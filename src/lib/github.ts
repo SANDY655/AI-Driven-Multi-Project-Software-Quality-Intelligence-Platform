@@ -1,10 +1,7 @@
 import { Octokit } from '@octokit/rest'
 
-// We will use the user's GitHub provider token to authenticate Octokit
-export const getGitHubClient = (providerToken: string) => {
-    return new Octokit({
-        auth: providerToken,
-    })
+export const getGitHubClient = (providerToken?: string) => {
+    return new Octokit(providerToken ? { auth: providerToken } : {})
 }
 
 export const extractOwnerAndRepo = (url: string) => {
@@ -24,8 +21,8 @@ export const extractOwnerAndRepo = (url: string) => {
     return null
 }
 
-export const getRepoDetails = async (providerToken: string, owner: string, repo: string) => {
-    const octokit = getGitHubClient(providerToken)
+export const getRepoDetails = async (providerToken: string | undefined | null, owner: string, repo: string) => {
+    const octokit = getGitHubClient(providerToken || undefined)
 
     const [repoData, branchesData] = await Promise.all([
         octokit.rest.repos.get({ owner, repo }),
@@ -57,6 +54,23 @@ export const getRepoContributors = async (owner: string, repo: string, token?: s
         }))
     } catch (e) {
         console.error('Failed to fetch contributors:', e)
+        return []
+    }
+}
+
+export const getRepoCollaborators = async (owner: string, repo: string, token?: string) => {
+    try {
+        if (!token) return [] // Need token for collaborators usually, especially for private repos
+        const octokit = new Octokit({ auth: token })
+        const { data } = await octokit.rest.repos.listCollaborators({ owner, repo, per_page: 10 })
+        return data.map(c => ({
+            login: c.login,
+            avatar_url: c.avatar_url,
+            html_url: c.html_url,
+            role_name: c.role_name
+        }))
+    } catch (e: any) {
+        console.error('Failed to fetch collaborators:', e.message)
         return []
     }
 }
