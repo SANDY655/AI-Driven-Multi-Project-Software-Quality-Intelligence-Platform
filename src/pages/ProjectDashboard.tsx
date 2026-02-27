@@ -7,8 +7,9 @@ import { InviteMemberModal } from '../components/projects/InviteMemberModal'
 import { EditMemberRoleModal } from '../components/projects/EditMemberRoleModal'
 import { EditProjectModal } from '../components/projects/EditProjectModal'
 import { CreateBugModal } from '../components/projects/CreateBugModal'
+import { CreateTaskModal } from '../components/projects/tasks/CreateTaskModal'
 import { Button } from '@/components/ui/button'
-import { Github, Users, Bug, AlertCircle, ArrowLeft, Trash2, Columns, ExternalLink } from 'lucide-react'
+import { Github, Users, Bug, AlertCircle, ArrowLeft, Trash2, Columns, ExternalLink, CheckSquare } from 'lucide-react'
 
 interface Project {
     id: string
@@ -260,7 +261,7 @@ export function ProjectDashboard() {
                         </div>
                         <div className="flex-1 p-8 flex flex-col items-center justify-center text-zinc-500 bg-zinc-950/20">
                             <Columns className="h-12 w-12 mb-4 text-blue-500/50" />
-                            <h3 className="text-lg font-medium text-white mb-2">Kanban Board</h3>
+                            <h3 className="text-lg font-medium text-white mb-2">Bug Kanban Board</h3>
                             <p className="text-center max-w-sm mb-6">
                                 View and manage all bugs for this project in the dedicated Kanban Board view. Track progress from Open to Closed.
                             </p>
@@ -269,7 +270,44 @@ export function ProjectDashboard() {
                                 className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 disabled:pointer-events-none disabled:opacity-50 bg-blue-600 text-white shadow hover:bg-blue-600/90 h-9 px-4 py-2 gap-2"
                             >
                                 <Columns className="h-4 w-4" />
-                                Open Kanban Board
+                                Open Bug Board
+                            </Link>
+                        </div>
+                    </div>
+
+                    {/* Tasks Board Section */}
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden flex flex-col min-h-[300px]">
+                        <div className="p-4 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/80">
+                            <h2 className="font-semibold text-white flex items-center gap-2">
+                                <CheckSquare className="h-4 w-4 text-green-400" />
+                                Tasks Tracker
+                            </h2>
+                            {(() => {
+                                const userMember = project.project_members?.find(m => m.profiles.id === user?.id);
+                                const userRole = userMember?.project_role;
+                                const canCreateTask = ['admin', 'pm', 'tester', 'developer'].includes(userRole || '');
+
+                                return canCreateTask && (
+                                    <CreateTaskModal
+                                        projectId={project.id}
+                                        projectCode={project.project_code}
+                                        onSuccess={handleAssignSuccess}
+                                    />
+                                );
+                            })()}
+                        </div>
+                        <div className="flex-1 p-8 flex flex-col items-center justify-center text-zinc-500 bg-zinc-950/20">
+                            <Columns className="h-12 w-12 mb-4 text-green-500/50" />
+                            <h3 className="text-lg font-medium text-white mb-2">Task Kanban Board</h3>
+                            <p className="text-center max-w-sm mb-6">
+                                View and manage all planned tasks for this project. Track progress from To Do to Done.
+                            </p>
+                            <Link
+                                to={`/projects/${project.id}/tasks`}
+                                className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 disabled:pointer-events-none disabled:opacity-50 bg-green-600 text-white shadow hover:bg-green-600/90 h-9 px-4 py-2 gap-2"
+                            >
+                                <Columns className="h-4 w-4" />
+                                Open Task Board
                             </Link>
                         </div>
                     </div>
