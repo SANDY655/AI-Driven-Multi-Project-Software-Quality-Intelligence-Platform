@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { CreateProjectModal } from '../components/projects/CreateProjectModal'
-import { Github, FolderGit2 } from 'lucide-react'
+import { Github, FolderGit2, Lock } from 'lucide-react'
 
 interface Profile {
     display_name: string
@@ -115,9 +115,16 @@ export function Dashboard() {
                                     <h3 className="text-lg font-semibold text-white group-hover:text-blue-400 transition-colors">
                                         {project.name}
                                     </h3>
-                                    <span className="text-xs font-mono bg-zinc-800 text-zinc-300 px-2 py-1 rounded">
-                                        {project.project_code}
-                                    </span>
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                        {project.github_details?.private && (
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-amber-500/10 text-amber-400 ring-1 ring-inset ring-amber-500/20 px-1.5 py-0.5 rounded-full">
+                                                <Lock className="h-2.5 w-2.5" /> Private
+                                            </span>
+                                        )}
+                                        <span className="text-xs font-mono bg-zinc-800 text-zinc-300 px-2 py-1 rounded">
+                                            {project.project_code}
+                                        </span>
+                                    </div>
                                 </div>
                                 <p className="text-zinc-400 text-sm mb-4 line-clamp-2 min-h-[40px]">
                                     {project.github_details?.description || 'No description provided.'}

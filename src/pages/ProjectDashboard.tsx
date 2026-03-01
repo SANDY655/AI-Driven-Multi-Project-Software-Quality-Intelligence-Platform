@@ -9,7 +9,7 @@ import { EditProjectModal } from '../components/projects/EditProjectModal'
 import { CreateBugModal } from '../components/projects/CreateBugModal'
 import { CreateTaskModal } from '../components/projects/tasks/CreateTaskModal'
 import { Button } from '@/components/ui/button'
-import { Github, Users, Bug, AlertCircle, ArrowLeft, Trash2, Columns, ExternalLink, CheckSquare } from 'lucide-react'
+import { Github, Users, Bug, AlertCircle, ArrowLeft, Trash2, Columns, ExternalLink, CheckSquare, Lock, ShieldCheck } from 'lucide-react'
 
 interface Project {
     id: string
@@ -34,6 +34,24 @@ interface Project {
     }>
 }
 
+const ROLE_BADGE: Record<string, { label: string; color: string }> = {
+    admin: { label: 'Admin', color: 'bg-red-500/20 text-red-400 ring-red-500/30' },
+    owner: { label: 'Owner', color: 'bg-purple-500/20 text-purple-400 ring-purple-500/30' },
+    write: { label: 'Write', color: 'bg-blue-500/20 text-blue-400 ring-blue-500/30' },
+    maintain: { label: 'Maintain', color: 'bg-amber-500/20 text-amber-400 ring-amber-500/30' },
+    triage: { label: 'Triage', color: 'bg-zinc-500/20 text-zinc-400 ring-zinc-500/30' },
+    read: { label: 'Read', color: 'bg-zinc-500/20 text-zinc-400 ring-zinc-500/30' },
+}
+
+function RoleBadge({ role }: { role: string }) {
+    const badge = ROLE_BADGE[role] ?? { label: role, color: 'bg-zinc-500/20 text-zinc-400 ring-zinc-500/30' }
+    return (
+        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ring-1 ring-inset uppercase ${badge.color}`}>
+            {badge.label}
+        </span>
+    )
+}
+
 export function ProjectDashboard() {
     const { id } = useParams<{ id: string }>()
     const navigate = useNavigate()
@@ -42,6 +60,17 @@ export function ProjectDashboard() {
     const [contributors, setContributors] = useState<any[]>([])
     const [collaborators, setCollaborators] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
+    const [githubToken, setGithubToken] = useState<string | undefined>(undefined)
+
+    // Fetch contributors + collaborators with a given token
+    const fetchGitHubData = async (owner: string, repo: string, token?: string) => {
+        const [contribs, collabs] = await Promise.all([
+            getRepoContributors(owner, repo, token),
+            getRepoCollaborators(owner, repo, token),
+        ])
+        setContributors(contribs)
+        setCollaborators(collabs)
+    }
 
     useEffect(() => {
         async function loadProject() {
@@ -67,14 +96,15 @@ export function ProjectDashboard() {
 
             if (data && !error) {
                 setProject(data)
-                // Fetch contributors and collaborators
-                const token = session?.provider_token || undefined
-                const [contribs, collabs] = await Promise.all([
-                    getRepoContributors(data.github_owner, data.github_repo, token),
-                    getRepoCollaborators(data.github_owner, data.github_repo, token)
-                ])
-                setContributors(contribs)
-                setCollaborators(collabs)
+
+                // Token resolution: OAuth provider token > stored PAT from creation
+                const token =
+                    session?.provider_token ||
+                    localStorage.getItem(`github_pat_${data.id}`) ||
+                    undefined
+
+                setGithubToken(token)
+                await fetchGitHubData(data.github_owner, data.github_repo, token)
             }
             setLoading(false)
         }
@@ -83,7 +113,6 @@ export function ProjectDashboard() {
     }, [id, user])
 
     const handleAssignSuccess = () => {
-        // Reload project data to show new member
         if (!id || !user) return
         supabase
             .from('projects')
@@ -154,6 +183,8 @@ export function ProjectDashboard() {
         )
     }
 
+    const isPrivate = project.github_details?.private === true
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -168,6 +199,11 @@ export function ProjectDashboard() {
                             <span className="text-sm font-mono bg-zinc-800 text-zinc-300 px-2 py-1 rounded align-middle">
                                 {project.project_code}
                             </span>
+                            {isPrivate && (
+                                <span className="inline-flex items-center gap-1 text-xs font-medium bg-amber-500/10 text-amber-400 ring-1 ring-inset ring-amber-500/20 px-2 py-1 rounded-full">
+                                    <Lock className="h-3 w-3" /> Private
+                                </span>
+                            )}
                         </h1>
                         <a
                             href={project.github_repo_url || `https://github.com/${project.github_owner}/${project.github_repo}`}
@@ -313,8 +349,9 @@ export function ProjectDashboard() {
                     </div>
                 </div>
 
-                {/* App Team Members Sidebar */}
+                {/* Sidebar */}
                 <div className="space-y-6">
+                    {/* App Team Members */}
                     <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
                         <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
                             <h2 className="font-semibold text-white flex items-center gap-2">
@@ -342,8 +379,6 @@ export function ProjectDashboard() {
                                                     {member.profiles.display_name}
                                                     {member.profiles.id === user?.id && <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded uppercase flex-shrink-0">You</span>}
                                                 </div>
-
-                                                {/* Edit Role Button - Only for admins/pms, and not for themselves if they want to avoid self-demotion (optional, but let's allow it for consistency) */}
                                                 {project.project_members?.some(m => m.profiles.id === user?.id && ['admin', 'pm'].includes(m.project_role)) && (
                                                     <EditMemberRoleModal
                                                         projectId={project.id}
@@ -362,17 +397,71 @@ export function ProjectDashboard() {
                         </div>
                     </div>
 
-                    {/* GitHub Contributors Sidebar */}
-                    {contributors.length > 0 && (
-                        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-                            <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
-                                <h2 className="font-semibold text-white flex items-center gap-2">
-                                    <Github className="h-4 w-4" />
-                                    Top Contributors
-                                </h2>
-                            </div>
-                            <div className="p-4">
-                                <div className="space-y-4">
+                    {/* GitHub Collaborators Panel — always shown */}
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+                        <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+                            <h2 className="font-semibold text-white flex items-center gap-2">
+                                <ShieldCheck className="h-4 w-4 text-amber-400" />
+                                GitHub Collaborators
+                                {isPrivate && <Lock className="h-3 w-3 text-amber-400/70" />}
+                            </h2>
+                            <span className="text-xs text-zinc-500">{collaborators.length} total</span>
+                        </div>
+                        <div className="p-4">
+                            {collaborators.length > 0 ? (
+                                <div className="space-y-3">
+                                    {collaborators.map((c, i) => (
+                                        <a key={i} href={c.html_url} target="_blank" rel="noreferrer" className="flex items-center gap-3 group">
+                                            <img src={c.avatar_url} alt="avatar" className="h-8 w-8 rounded-full border border-zinc-700 group-hover:border-zinc-500 transition-colors" />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-sm text-zinc-300 font-medium truncate group-hover:text-blue-400 transition-colors flex justify-between items-center gap-2">
+                                                    <span>@{c.login}</span>
+                                                    <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                                                </div>
+                                                <div className="mt-0.5">
+                                                    <RoleBadge role={c.role_name} />
+                                                </div>
+                                            </div>
+                                        </a>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="py-3 text-sm space-y-3">
+                                    {githubToken ? (
+                                        // Has a token but still no collaborators
+                                        <div className="text-center text-zinc-500 space-y-1 py-2">
+                                            <ShieldCheck className="h-6 w-6 mx-auto opacity-30 mb-2" />
+                                            <p>No collaborators found.</p>
+                                            <p className="text-xs">You may not have collaborator access to this repo.</p>
+                                        </div>
+                                    ) : (
+                                        // No token available at all
+                                        <div className="text-center text-zinc-500 py-3 space-y-1">
+                                            <ShieldCheck className="h-6 w-6 mx-auto opacity-30 mb-2" />
+                                            <p className="text-sm">No GitHub token found.</p>
+                                            <p className="text-xs text-zinc-600">
+                                                When creating a project, add a GitHub Personal Access Token
+                                                with <code className="text-amber-500/80">repo</code> scope to view collaborators automatically.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Top Contributors Panel — always shown */}
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+                        <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+                            <h2 className="font-semibold text-white flex items-center gap-2">
+                                <Github className="h-4 w-4" />
+                                Top Contributors
+                            </h2>
+                            <span className="text-xs text-zinc-500">{contributors.length} shown</span>
+                        </div>
+                        <div className="p-4">
+                            {contributors.length > 0 ? (
+                                <div className="space-y-3">
                                     {contributors.map((c, i) => (
                                         <a key={i} href={c.html_url} target="_blank" rel="noreferrer" className="flex items-center gap-3 group">
                                             <img src={c.avatar_url} alt="avatar" className="h-8 w-8 rounded-full border border-zinc-700 group-hover:border-zinc-500 transition-colors" />
@@ -386,37 +475,15 @@ export function ProjectDashboard() {
                                         </a>
                                     ))}
                                 </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* GitHub Collaborators Sidebar */}
-                    {collaborators.length > 0 && (
-                        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden mt-6">
-                            <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
-                                <h2 className="font-semibold text-white flex items-center gap-2">
-                                    <Github className="h-4 w-4" />
-                                    GitHub Collaborators
-                                </h2>
-                            </div>
-                            <div className="p-4">
-                                <div className="space-y-4">
-                                    {collaborators.map((c, i) => (
-                                        <a key={i} href={c.html_url} target="_blank" rel="noreferrer" className="flex items-center gap-3 group">
-                                            <img src={c.avatar_url} alt="avatar" className="h-8 w-8 rounded-full border border-zinc-700 group-hover:border-zinc-500 transition-colors" />
-                                            <div className="flex-1 min-w-0">
-                                                <div className="text-sm text-zinc-300 font-medium truncate group-hover:text-blue-400 transition-colors flex justify-between items-center">
-                                                    @{c.login}
-                                                    <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                </div>
-                                                <div className="text-xs text-zinc-500">{c.role_name || 'Collaborator'}</div>
-                                            </div>
-                                        </a>
-                                    ))}
+                            ) : (
+                                <div className="text-center py-4 text-zinc-500 text-sm">
+                                    <Github className="h-6 w-6 mx-auto opacity-30 mb-2" />
+                                    <p>No contributors found.</p>
+                                    {isPrivate && <p className="text-xs mt-1">Private repo — contributors may require GitHub auth.</p>}
                                 </div>
-                            </div>
+                            )}
                         </div>
-                    )}
+                    </div>
                 </div>
             </div>
         </div>
