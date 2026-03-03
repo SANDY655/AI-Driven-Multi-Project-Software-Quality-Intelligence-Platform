@@ -216,7 +216,7 @@ export function CreateProjectModal({ onSuccess }: { onSuccess: () => void }) {
                             <button
                                 type="button"
                                 onClick={() => setShowPatField(v => !v)}
-                                className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                                className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-700 transition-colors"
                             >
                                 <Lock className="h-3 w-3" />
                                 {showPatField ? 'Hide' : 'Private repo?'} {!showPatField && '— Add GitHub Token'}
@@ -229,7 +229,7 @@ export function CreateProjectModal({ onSuccess }: { onSuccess: () => void }) {
                                     render={({ field }) => (
                                         <FormItem className="mt-3">
                                             <FormLabel className="flex items-center gap-1.5">
-                                                <KeyRound className="h-3.5 w-3.5 text-amber-400" />
+                                                <KeyRound className="h-3.5 w-3.5 text-amber-600" />
                                                 GitHub Personal Access Token
                                             </FormLabel>
                                             <FormControl>
@@ -240,9 +240,9 @@ export function CreateProjectModal({ onSuccess }: { onSuccess: () => void }) {
                                                 />
                                             </FormControl>
                                             <FormDescription className="text-xs">
-                                                Required for private repos. Needs <code className="bg-zinc-800 px-1 rounded text-amber-400">repo</code> scope. Token is used once and never stored.
+                                                Required for private repos. Needs <code className="bg-amber-50 px-1 rounded text-amber-700 border border-amber-200">repo</code> scope. Token is used once and never stored.
                                                 {session?.provider_token && (
-                                                    <span className="block mt-1 text-green-400">✓ Your GitHub OAuth token will be used automatically if this field is empty.</span>
+                                                    <span className="block mt-1 text-green-600">✓ Your GitHub OAuth token will be used automatically if this field is empty.</span>
                                                 )}
                                             </FormDescription>
                                             <FormMessage />

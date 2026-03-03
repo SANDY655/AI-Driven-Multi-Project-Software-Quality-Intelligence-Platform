@@ -28,37 +28,39 @@ export function TaskKanbanPage() {
 
 
     return (
-        <div className="space-y-6 flex flex-col h-full min-h-0 w-full">
+        <div className="space-y-6 flex flex-col h-full min-h-0 w-full p-8 bg-zinc-50">
             {/* Header */}
             <div className="flex justify-between items-center flex-shrink-0">
                 <div className="flex items-center gap-4">
-                    <Link to={`/projects/${id}`} className="p-2 -ml-2 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors">
+                    <Link to={`/projects/${id}`} className="p-2 -ml-2 hover:bg-zinc-100 rounded-full text-zinc-500 hover:text-zinc-900 transition-colors">
                         <ArrowLeft className="h-5 w-5" />
                     </Link>
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-3">
+                        <h1 className="text-3xl font-bold tracking-tight text-zinc-900 flex items-center gap-3">
                             Tasks Board
                             <span className="text-xl text-zinc-500 font-normal ml-2">/ {project.name}</span>
                         </h1>
                     </div>
                 </div>
-                {(() => {
-                    const userMember = project.project_members?.find((m: any) => m.profiles?.id === user?.id)
-                    const userRole = userMember?.project_role
-                    const canCreateTask = ['admin', 'pm', 'tester', 'developer'].includes(userRole || '')
+                <div className="flex items-center gap-3">
+                    {(() => {
+                        const userMember = project.project_members?.find((m: any) => m.profiles?.id === user?.id)
+                        const userRole = userMember?.project_role
+                        const canCreateTask = ['admin', 'pm', 'tester', 'developer'].includes(userRole || '')
 
-                    return canCreateTask && (
-                        <CreateTaskModal
-                            projectId={id}
-                            projectCode={project.project_code}
-                            onSuccess={() => setRefreshTrigger(prev => prev + 1)}
-                        />
-                    )
-                })()}
+                        return canCreateTask && (
+                            <CreateTaskModal
+                                projectId={id}
+                                projectCode={project.project_code}
+                                onSuccess={() => setRefreshTrigger(prev => prev + 1)}
+                            />
+                        )
+                    })()}
+                </div>
             </div>
 
             {/* Board Container */}
-            <div className="flex-1 min-h-0 bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden flex flex-col">
+            <div className="flex-1 min-h-0 bg-white border border-zinc-200 rounded-[28px] overflow-hidden flex flex-col shadow-sm">
                 <TaskKanbanBoard
                     projectId={id}
                     refreshTrigger={refreshTrigger}

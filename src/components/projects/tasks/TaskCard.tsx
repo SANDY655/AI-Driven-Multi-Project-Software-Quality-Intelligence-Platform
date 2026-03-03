@@ -21,6 +21,7 @@ interface TaskCardProps {
     task: Task
     index: number
     onClick: (task: Task) => void
+    columnColor?: string
 }
 
 const priorityColors: Record<string, string> = {
@@ -37,7 +38,7 @@ const priorityLabels: Record<string, string> = {
     low: 'Low',
 }
 
-export function TaskCard({ task, index, onClick }: TaskCardProps) {
+export function TaskCard({ task, index, onClick, columnColor }: TaskCardProps) {
     return (
         <Draggable draggableId={task.id} index={index}>
             {(provided, snapshot) => (
@@ -46,17 +47,17 @@ export function TaskCard({ task, index, onClick }: TaskCardProps) {
                     {...provided.draggableProps}
                     {...provided.dragHandleProps}
                     onClick={() => onClick(task)}
-                    className={`p-3 mb-2 rounded-lg border text-left cursor-pointer transition-colors ${snapshot.isDragging ? 'bg-zinc-800 border-zinc-600 shadow-xl' : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/80'
+                    className={`p-4 mb-3 rounded-[24px] bg-white border text-left shadow-sm cursor-pointer transition-all hover:shadow-md ${columnColor ? columnColor.replace('bg-', 'border-').replace('100', '200') : 'border-zinc-200'} ${snapshot.isDragging ? 'rotate-2 scale-105 shadow-xl ring-2 ring-zinc-900/5' : 'hover:-translate-y-0.5'
                         }`}
                 >
-                    <div className="flex justify-between items-start mb-2">
-                        <span className="text-xs font-mono text-zinc-500">{task.task_display_id}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${priorityColors[task.priority] || priorityColors.medium}`}>
+                    <div className="flex justify-between items-start mb-3">
+                        <span className="text-xs font-mono font-medium text-zinc-400 bg-zinc-50 px-2 py-0.5 rounded-full">{task.task_display_id}</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${priorityColors[task.priority] || priorityColors.medium}`}>
                             {priorityLabels[task.priority] || task.priority}
                         </span>
                     </div>
 
-                    <h4 className="text-sm font-medium text-white mb-3 line-clamp-2">
+                    <h4 className="text-[15px] font-semibold text-zinc-800 mb-4 line-clamp-2 leading-snug">
                         {task.title}
                     </h4>
 
@@ -64,15 +65,15 @@ export function TaskCard({ task, index, onClick }: TaskCardProps) {
                         <div className="flex items-center gap-2">
                             {task.assignee ? (
                                 task.assignee.avatar_url ? (
-                                    <img src={task.assignee.avatar_url} alt="Assignee" className="h-5 w-5 rounded-full ring-1 ring-zinc-700" title={task.assignee.display_name} />
+                                    <img src={task.assignee.avatar_url} alt="Assignee" className="h-6 w-6 rounded-full ring-2 ring-white shadow-sm" title={task.assignee.display_name} />
                                 ) : (
-                                    <div className="h-5 w-5 rounded-full bg-zinc-800 flex items-center justify-center ring-1 ring-zinc-700 text-[10px]" title={task.assignee.display_name}>
+                                    <div className="h-6 w-6 rounded-full bg-zinc-100 flex items-center justify-center ring-2 ring-white shadow-sm text-[10px] font-semibold text-zinc-600" title={task.assignee.display_name}>
                                         {task.assignee.display_name.charAt(0)}
                                     </div>
                                 )
                             ) : (
-                                <div className="h-5 w-5 rounded-full bg-zinc-800/50 flex items-center justify-center ring-1 ring-zinc-800/50 border border-dashed border-zinc-600" title="Unassigned">
-                                    <span className="text-[10px] text-zinc-600">?</span>
+                                <div className="h-6 w-6 rounded-full bg-zinc-50 flex items-center justify-center ring-2 ring-white border border-dashed border-zinc-300" title="Unassigned">
+                                    <span className="text-[10px] text-zinc-400 font-medium">?</span>
                                 </div>
                             )}
                         </div>

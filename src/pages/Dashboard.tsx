@@ -60,82 +60,82 @@ export function Dashboard() {
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-bold tracking-tight text-white">Project Dashboard</h1>
+                <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Project Dashboard</h1>
                 <CreateProjectModal onSuccess={loadData} />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-sm">
-                    <h3 className="text-zinc-400 text-sm font-medium mb-2">Welcome back</h3>
-                    <p className="text-2xl font-semibold text-white">
+                <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
+                    <h3 className="text-zinc-500 text-sm font-medium mb-2">Welcome back</h3>
+                    <p className="text-2xl font-semibold text-zinc-900">
                         {profile?.display_name || user?.email}
                     </p>
                     <div className="mt-4 flex gap-2">
-                        <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-400 ring-1 ring-inset ring-blue-500/20">
+                        <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-600/20">
                             {profile?.role || 'user'}
                         </span>
                     </div>
                 </div>
 
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-sm">
-                    <h3 className="text-zinc-400 text-sm font-medium mb-2">Active Projects</h3>
-                    <p className="text-3xl font-semibold text-white">{projects.length}</p>
+                <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
+                    <h3 className="text-zinc-500 text-sm font-medium mb-2">Active Projects</h3>
+                    <p className="text-3xl font-semibold text-zinc-900">{projects.length}</p>
                 </div>
 
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-sm">
-                    <h3 className="text-zinc-400 text-sm font-medium mb-2">Open Bugs</h3>
-                    <p className="text-3xl font-semibold text-white">0</p>
+                <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
+                    <h3 className="text-zinc-500 text-sm font-medium mb-2">Open Bugs</h3>
+                    <p className="text-3xl font-semibold text-zinc-900">0</p>
                 </div>
             </div>
 
             <div className="mt-8">
-                <h2 className="text-xl font-semibold text-white mb-4">Your Projects</h2>
+                <h2 className="text-xl font-semibold text-zinc-900 mb-4">Your Projects</h2>
                 {loading ? (
                     <div className="animate-pulse space-y-4">
-                        <div className="h-32 bg-zinc-900 rounded-xl border border-zinc-800"></div>
-                        <div className="h-32 bg-zinc-900 rounded-xl border border-zinc-800"></div>
+                        <div className="h-32 bg-white rounded-2xl border border-zinc-200"></div>
+                        <div className="h-32 bg-white rounded-2xl border border-zinc-200"></div>
                     </div>
                 ) : projects.length === 0 ? (
-                    <div className="border border-zinc-800 bg-zinc-900/50 rounded-xl min-h-[300px] flex items-center justify-center">
+                    <div className="border border-zinc-200 bg-white shadow-sm rounded-2xl min-h-[300px] flex items-center justify-center">
                         <div className="text-center text-zinc-500">
-                            <FolderGit2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                            <FolderGit2 className="h-12 w-12 mx-auto mb-4 opacity-50 text-zinc-400" />
                             <p>No projects found.</p>
                             <p className="text-sm mt-1">Create a new project to get started.</p>
                         </div>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {projects.map((project) => (
                             <Link
                                 key={project.id}
                                 to={`/projects/${project.id}`}
-                                className="group block h-full bg-zinc-900 border border-zinc-800 rounded-xl p-5 hover:border-zinc-700 transition-colors"
+                                className="group block h-full bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm hover:shadow-md hover:border-zinc-300 transition-all duration-200 hover:-translate-y-0.5"
                             >
                                 <div className="flex items-start justify-between mb-2">
-                                    <h3 className="text-lg font-semibold text-white group-hover:text-blue-400 transition-colors">
+                                    <h3 className="text-lg font-semibold text-zinc-800 group-hover:text-blue-600 transition-colors">
                                         {project.name}
                                     </h3>
                                     <div className="flex items-center gap-1.5 flex-shrink-0">
                                         {project.github_details?.private && (
-                                            <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-amber-500/10 text-amber-400 ring-1 ring-inset ring-amber-500/20 px-1.5 py-0.5 rounded-full">
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20 px-2 py-0.5 rounded-full">
                                                 <Lock className="h-2.5 w-2.5" /> Private
                                             </span>
                                         )}
-                                        <span className="text-xs font-mono bg-zinc-800 text-zinc-300 px-2 py-1 rounded">
+                                        <span className="text-[11px] font-mono font-semibold bg-zinc-100 text-zinc-600 px-2 py-1 rounded-md">
                                             {project.project_code}
                                         </span>
                                     </div>
                                 </div>
-                                <p className="text-zinc-400 text-sm mb-4 line-clamp-2 min-h-[40px]">
+                                <p className="text-zinc-500 text-sm mb-6 line-clamp-2 min-h-[40px] leading-relaxed">
                                     {project.github_details?.description || 'No description provided.'}
                                 </p>
-                                <div className="flex items-center gap-4 text-xs text-zinc-500 mt-auto pt-4 border-t border-zinc-800/50">
-                                    <span className="flex items-center gap-1">
-                                        <Github className="h-3 w-3" />
+                                <div className="flex items-center gap-4 text-[13px] font-medium text-zinc-400 mt-auto pt-4 border-t border-zinc-100">
+                                    <span className="flex items-center gap-1.5">
+                                        <Github className="h-3.5 w-3.5" />
                                         {project.github_owner}/{project.github_repo}
                                     </span>
-                                    <span className="flex items-center gap-1 ml-auto">
-                                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                    <span className="flex items-center gap-1.5 ml-auto">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
                                         Active
                                     </span>
                                 </div>

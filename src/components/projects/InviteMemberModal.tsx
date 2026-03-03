@@ -69,7 +69,36 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
                 throw new Error(inviteError.message)
             }
 
-            // Success
+            // Success - member added
+
+            // Fetch additional details for the email
+            const { data: project } = await supabase
+                .from('projects')
+                .select('name')
+                .eq('id', projectId)
+                .single()
+
+            const { data: inviterProfile } = await supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('id', user?.id)
+                .single()
+
+            // Try to send the invitation email, but don't fail the whole process if it errors
+            try {
+                await supabase.functions.invoke('send-invite-email', {
+                    body: {
+                        email: email.trim().toLowerCase(),
+                        projectName: project?.name || 'your new project',
+                        role,
+                        inviterName: inviterProfile?.full_name || user?.email || 'A team member'
+                    }
+                })
+            } catch (emailErr) {
+                console.error('Failed to send invite email:', emailErr)
+                // We don't throw an error here because the user was already successfully added
+            }
+
             setOpen(false)
             setEmail('')
             setRole('developer')

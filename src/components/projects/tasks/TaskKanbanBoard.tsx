@@ -12,10 +12,10 @@ interface TaskKanbanBoardProps {
 }
 
 const COLUMNS = [
-    { id: 'todo', title: 'To Do', color: 'border-zinc-500' },
-    { id: 'in_progress', title: 'In Progress', color: 'border-blue-500' },
-    { id: 'in_review', title: 'In Review', color: 'border-yellow-500' },
-    { id: 'done', title: 'Done', color: 'border-green-500' },
+    { id: 'todo', title: 'To Do', color: 'bg-zinc-100', dot: 'bg-zinc-400', text: 'text-zinc-800' },
+    { id: 'in_progress', title: 'In Progress', color: 'bg-blue-100', dot: 'bg-blue-400', text: 'text-zinc-800' },
+    { id: 'in_review', title: 'In Review', color: 'bg-amber-100', dot: 'bg-amber-400', text: 'text-zinc-800' },
+    { id: 'done', title: 'Done', color: 'bg-emerald-100', dot: 'bg-emerald-400', text: 'text-zinc-800' },
 ]
 
 export function TaskKanbanBoard({ projectId, refreshTrigger = 0, userRole }: TaskKanbanBoardProps) {
@@ -100,27 +100,30 @@ export function TaskKanbanBoard({ projectId, refreshTrigger = 0, userRole }: Tas
 
     if (loading) {
         return (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 flex items-center justify-center">
+            <div className="bg-zinc-50 border border-zinc-200 rounded-3xl p-8 flex items-center justify-center h-full m-6">
                 <div className="animate-pulse flex flex-col items-center">
-                    <CheckSquare className="h-8 w-8 text-zinc-700 mb-4" />
-                    <div className="h-4 w-32 bg-zinc-800 rounded"></div>
+                    <CheckSquare className="h-8 w-8 text-zinc-300 mb-4" />
+                    <div className="h-4 w-32 bg-zinc-200 rounded"></div>
                 </div>
             </div>
         )
     }
 
     return (
-        <div className="flex-1 overflow-x-auto p-6 flex gap-6 bg-zinc-950 items-stretch min-h-0">
+        <div className="flex-1 overflow-x-auto p-8 flex gap-6 bg-zinc-50/50 items-stretch min-h-0">
             <DragDropContext onDragEnd={onDragEnd}>
                 {COLUMNS.map(column => {
                     const columnTasks = getTasksByStatus(column.id)
 
                     return (
-                        <div key={column.id} className="flex-shrink-0 w-80 flex flex-col bg-zinc-900 shadow-xl shadow-black/20 rounded-xl border border-zinc-800/80 max-h-full">
-                            <div className={`p-4 border-b-2 flex justify-between items-center rounded-t-xl bg-zinc-900/40 ${column.color}`}>
-                                <h3 className="font-semibold text-sm text-zinc-200">{column.title}</h3>
-                                <span className="text-xs font-medium bg-zinc-800/80 text-zinc-400 px-2.5 py-1 rounded-full border border-zinc-700/50">
-                                    {columnTasks.length}
+                        <div key={column.id} className={`flex-shrink-0 w-80 flex flex-col ${column.color} rounded-[32px] max-h-full pb-2 shadow-sm`}>
+                            <div className="px-6 py-5 flex justify-between items-center rounded-t-[32px]">
+                                <div className="flex items-center gap-2">
+                                    <div className={`w-1.5 h-1.5 rounded-full ${column.dot}`}></div>
+                                    <h3 className={`font-semibold text-[15px] ${column.text}`}>{column.title}</h3>
+                                </div>
+                                <span className={`text-[11px] font-semibold text-zinc-400 bg-white/50 px-0 opacity-0 group-hover:opacity-100 cursor-pointer`}>
+                                    •••
                                 </span>
                             </div>
 
@@ -129,15 +132,16 @@ export function TaskKanbanBoard({ projectId, refreshTrigger = 0, userRole }: Tas
                                     <div
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
-                                        className={`flex-1 p-3 overflow-y-auto space-y-3 transition-colors min-h-[150px] ${snapshot.isDraggingOver ? 'bg-zinc-800/20' : ''
+                                        className={`flex-1 px-4 overflow-y-auto space-y-4 transition-colors min-h-[150px] ${snapshot.isDraggingOver ? 'bg-black/5 rounded-2xl mx-2' : ''
                                             }`}
                                     >
                                         {columnTasks.map((task, index) => (
-                                            <div key={task.id} className="mb-3">
+                                            <div key={task.id} className="">
                                                 <TaskCard
                                                     task={task}
                                                     index={index}
                                                     onClick={(b) => setSelectedTaskId(b.id)}
+                                                    columnColor={column.color}
                                                 />
                                             </div>
                                         ))}

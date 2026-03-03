@@ -38,17 +38,17 @@ export function Register() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-50 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="min-h-screen flex items-center justify-center bg-zinc-50 text-zinc-900 py-12 px-4 sm:px-6 lg:px-8">
             <div className="max-w-md w-full space-y-8">
                 <div className="flex flex-col items-center">
-                    <Bug className="h-12 w-12 text-blue-500 mb-4" />
+                    <Bug className="h-12 w-12 text-blue-600 mb-4" />
                     <h2 className="text-center text-3xl font-extrabold tracking-tight">
                         Create an account
                     </h2>
                 </div>
-                <form className="mt-8 space-y-6 bg-zinc-900 border border-zinc-800 p-8 rounded-xl shadow-2xl" onSubmit={handleRegister}>
+                <form className="mt-8 space-y-6 bg-white border border-zinc-200 p-8 rounded-2xl shadow-xl" onSubmit={handleRegister}>
                     {error && (
-                        <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded-md text-sm">
+                        <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-md text-sm">
                             {error}
                         </div>
                     )}
@@ -60,7 +60,7 @@ export function Register() {
                                 name="displayName"
                                 type="text"
                                 required
-                                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-zinc-700 bg-zinc-800 placeholder-zinc-400 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-zinc-300 bg-white placeholder-zinc-400 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-colors"
                                 placeholder="Full Name"
                                 value={displayName}
                                 onChange={(e) => setDisplayName(e.target.value)}
@@ -73,7 +73,7 @@ export function Register() {
                                 name="email"
                                 type="email"
                                 required
-                                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-zinc-700 bg-zinc-800 placeholder-zinc-400 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-zinc-300 bg-white placeholder-zinc-400 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-colors"
                                 placeholder="Email address"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
@@ -86,7 +86,7 @@ export function Register() {
                                 name="password"
                                 type="password"
                                 required
-                                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-zinc-700 bg-zinc-800 placeholder-zinc-400 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-zinc-300 bg-white placeholder-zinc-400 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-colors"
                                 placeholder="Password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
@@ -105,7 +105,7 @@ export function Register() {
                     </div>
 
                     <div className="text-sm text-center">
-                        <Link to="/login" className="font-medium text-blue-500 hover:text-blue-400">
+                        <Link to="/login" className="font-medium text-blue-600 hover:text-blue-500">
                             Already have an account? Sign in
                         </Link>
                     </div>
