@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Bug } from 'lucide-react'
+import { Bug, Eye, EyeOff } from 'lucide-react'
 
 export function Register() {
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
+    const [showPassword, setShowPassword] = useState(false)
     const [displayName, setDisplayName] = useState('')
     const [error, setError] = useState<string | null>(null)
     const [loading, setLoading] = useState(false)
@@ -38,79 +39,114 @@ export function Register() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-zinc-50 text-zinc-900 py-12 px-4 sm:px-6 lg:px-8">
-            <div className="max-w-md w-full space-y-8">
-                <div className="flex flex-col items-center">
-                    <Bug className="h-12 w-12 text-blue-600 mb-4" />
-                    <h2 className="text-center text-3xl font-extrabold tracking-tight">
-                        Create an account
-                    </h2>
+        <div className="min-h-screen bg-white flex flex-col md:flex-row w-full font-sans">
+
+            {/* Left Side: Visual Splash */}
+            <div className="w-full md:w-1/2 relative hidden md:block border-r border-zinc-100 min-h-screen">
+                <img
+                    src="/login_splash.png"
+                    alt="Colorful abstract waves"
+                    className="absolute inset-0 w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-12 lg:p-24">
+                    <div className="flex items-center gap-2 mb-6 text-white/90">
+                        <Bug className="w-8 h-8" />
+                        <span className="font-bold text-xl drop-shadow-md">BugTracker</span>
+                    </div>
+                    <h1 className="text-white text-4xl lg:text-5xl font-serif font-bold leading-tight drop-shadow-lg max-w-sm">
+                        Start your journey with us today
+                    </h1>
                 </div>
-                <form className="mt-8 space-y-6 bg-white border border-zinc-200 p-8 rounded-2xl shadow-xl" onSubmit={handleRegister}>
-                    {error && (
-                        <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-md text-sm">
-                            {error}
-                        </div>
-                    )}
-                    <div className="space-y-4">
+            </div>
+
+            {/* Right Side: Register Form */}
+            <div className="w-full md:w-1/2 flex flex-col justify-center px-8 sm:px-16 lg:px-24 py-12 bg-white min-h-screen">
+                <div className="w-full max-w-sm mx-auto">
+
+                    {/* Mobile Header */}
+                    <div className="flex items-center gap-2 mb-8 md:hidden text-zinc-900">
+                        <Bug className="w-8 h-8 text-blue-600" />
+                        <span className="font-bold text-xl">BugTracker</span>
+                    </div>
+
+                    <div className="mb-8">
+                        <h2 className="text-3xl font-extrabold text-zinc-900 mb-2 font-serif">Create an account</h2>
+                        <p className="text-zinc-500 text-sm">Please fill in your details to get started.</p>
+                    </div>
+
+                    <form onSubmit={handleRegister} className="space-y-4">
+                        {error && (
+                            <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-xl text-sm font-medium">
+                                {error}
+                            </div>
+                        )}
+
                         <div>
-                            <label htmlFor="displayName" className="sr-only">Display Name</label>
+                            <label className="block text-sm font-semibold text-zinc-700 mb-1.5" htmlFor="displayName">Full Name</label>
                             <input
                                 id="displayName"
-                                name="displayName"
                                 type="text"
                                 required
-                                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-zinc-300 bg-white placeholder-zinc-400 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-colors"
-                                placeholder="Full Name"
+                                className="w-full px-4 py-3 bg-zinc-100 border-transparent rounded-[12px] text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:bg-white transition-all text-sm"
+                                placeholder="Enter your full name"
                                 value={displayName}
                                 onChange={(e) => setDisplayName(e.target.value)}
                             />
                         </div>
+
                         <div>
-                            <label htmlFor="email" className="sr-only">Email address</label>
+                            <label className="block text-sm font-semibold text-zinc-700 mb-1.5" htmlFor="email">Email</label>
                             <input
                                 id="email"
-                                name="email"
                                 type="email"
                                 required
-                                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-zinc-300 bg-white placeholder-zinc-400 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-colors"
-                                placeholder="Email address"
+                                className="w-full px-4 py-3 bg-zinc-100 border-transparent rounded-[12px] text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:bg-white transition-all text-sm"
+                                placeholder="Enter your email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                             />
                         </div>
-                        <div>
-                            <label htmlFor="password" className="sr-only">Password</label>
-                            <input
-                                id="password"
-                                name="password"
-                                type="password"
-                                required
-                                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-zinc-300 bg-white placeholder-zinc-400 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-colors"
-                                placeholder="Password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                            />
-                        </div>
-                    </div>
 
-                    <div>
+                        <div>
+                            <label className="block text-sm font-semibold text-zinc-700 mb-1.5" htmlFor="password">Password</label>
+                            <div className="relative">
+                                <input
+                                    id="password"
+                                    type={showPassword ? "text" : "password"}
+                                    required
+                                    className="w-full px-4 py-3 bg-zinc-100 border-transparent rounded-[12px] text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:bg-white transition-all text-sm pr-12"
+                                    placeholder="••••••••"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 focus:outline-none flex items-center justify-center p-1"
+                                >
+                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                </button>
+                            </div>
+                        </div>
+
                         <button
                             type="submit"
                             disabled={loading}
-                            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                            className="w-full py-3 px-4 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold rounded-[12px] shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-900 disabled:opacity-70 flex justify-center items-center mt-6"
                         >
                             {loading ? 'Signing up...' : 'Sign up'}
                         </button>
-                    </div>
+                    </form>
 
-                    <div className="text-sm text-center">
-                        <Link to="/login" className="font-medium text-blue-600 hover:text-blue-500">
-                            Already have an account? Sign in
+                    <p className="mt-8 text-center text-sm text-zinc-600">
+                        Already have an account?{' '}
+                        <Link to="/login" className="font-semibold text-zinc-900 hover:underline">
+                            Sign in here
                         </Link>
-                    </div>
-                </form>
+                    </p>
+                </div>
             </div>
+
         </div>
     )
 }
