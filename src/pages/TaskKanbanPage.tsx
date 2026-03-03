@@ -28,7 +28,7 @@ export function TaskKanbanPage() {
 
 
     return (
-        <div className="space-y-6 flex flex-col h-full min-h-0 w-full p-8 bg-zinc-50">
+        <div className="space-y-6 flex flex-col flex-1 min-h-0 w-full p-8 bg-zinc-50">
             {/* Header */}
             <div className="flex justify-between items-center flex-shrink-0">
                 <div className="flex items-center gap-4">

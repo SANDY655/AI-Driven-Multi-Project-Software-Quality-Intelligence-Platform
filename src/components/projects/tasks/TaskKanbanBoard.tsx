@@ -116,7 +116,7 @@ export function TaskKanbanBoard({ projectId, refreshTrigger = 0, userRole }: Tas
                     const columnTasks = getTasksByStatus(column.id)
 
                     return (
-                        <div key={column.id} className={`flex-shrink-0 w-80 flex flex-col ${column.color} rounded-[32px] max-h-full pb-2 shadow-sm`}>
+                        <div key={column.id} className={`flex-shrink-0 w-80 flex flex-col ${column.color} rounded-[32px] h-full pb-2 shadow-sm`}>
                             <div className="px-6 py-5 flex justify-between items-center rounded-t-[32px]">
                                 <div className="flex items-center gap-2">
                                     <div className={`w-1.5 h-1.5 rounded-full ${column.dot}`}></div>

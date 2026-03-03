@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Loader2, UserPlus, Clock, MessageSquare, Activity, Trash2 } from 'lucide-react'
+import { Loader2, UserPlus, Clock, MessageSquare, Activity, Trash2, X } from 'lucide-react'
 
 interface BugDetailsModalProps {
     bugId: string | null
@@ -195,7 +195,7 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
 
     return (
         <Dialog open={!!bugId} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="sm:max-w-[900px] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden bg-white border-zinc-200 shadow-xl">
+            <DialogContent showCloseButton={false} className="sm:max-w-[900px] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden bg-white border-zinc-200 shadow-xl">
                 {loading || !bug ? (
                     <div className="flex-1 flex items-center justify-center bg-zinc-50/50">
                         <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
@@ -214,25 +214,34 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
                                     {bug.title}
                                 </DialogTitle>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
                                 {canDelete && (
                                     <Button
                                         variant="ghost"
                                         size="icon"
                                         onClick={handleDeleteBug}
-                                        className="h-9 w-9 text-zinc-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                        className="h-9 w-9 text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                                         title="Delete Bug"
                                     >
-                                        <Trash2 className="h-4 w-4" />
+                                        <Trash2 className="h-[18px] w-[18px]" />
                                     </Button>
                                 )}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={onClose}
+                                    className="h-9 w-9 text-zinc-400 hover:text-zinc-900 transition-colors"
+                                    title="Close"
+                                >
+                                    <X className="h-5 w-5" />
+                                </Button>
                             </div>
                         </div>
 
                         {/* Body layout */}
                         <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-white">
                             {/* Main Content (Left) */}
-                            <div className="flex-1 flex flex-col h-full overflow-y-auto border-r border-zinc-200 p-6 space-y-8 no-scrollbar bg-white">
+                            <div className="w-[60%] flex flex-col h-full overflow-y-auto border-r border-zinc-200 p-6 space-y-8 no-scrollbar bg-white">
                                 {/* Description */}
                                 <section>
                                     <h3 className="text-xs font-semibold text-zinc-500 mb-4 uppercase tracking-widest flex items-center gap-2">
@@ -321,7 +330,7 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
                             </div>
 
                             {/* Sidebar (Right) */}
-                            <div className="w-full md:w-72 bg-zinc-50 p-6 flex flex-col h-full overflow-y-auto no-scrollbar space-y-6">
+                            <div className="w-[40%] bg-zinc-50 p-6 flex flex-col h-full overflow-y-auto no-scrollbar space-y-6">
                                 {/* Attributes */}
                                 <div className="space-y-4">
                                     <div>

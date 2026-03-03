@@ -113,38 +113,38 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button size="sm" variant="outline" className="gap-2 text-zinc-300 border-zinc-700 bg-zinc-900 hover:bg-zinc-800 hover:text-white">
+                <Button size="sm" variant="outline" className="gap-2 text-zinc-600 border-zinc-200 bg-white hover:bg-zinc-50 hover:text-zinc-900 shadow-sm transition-all h-9">
                     <UserPlus className="h-4 w-4" />
                     Invite
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-zinc-800 text-zinc-100">
+            <DialogContent className="sm:max-w-[425px] bg-white border-zinc-200 text-zinc-900 shadow-xl rounded-2xl">
                 <DialogHeader>
                     <DialogTitle>Invite a Team Member</DialogTitle>
-                    <DialogDescription className="text-zinc-400">
+                    <DialogDescription className="text-zinc-500">
                         Add an existing user to this project. They must have an account.
                     </DialogDescription>
                 </DialogHeader>
 
                 <form onSubmit={handleInvite} className="space-y-4 py-4">
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">User Email Address</label>
+                        <label className="text-sm font-medium text-zinc-700">User Email Address</label>
                         <input
                             type="email"
                             required
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             placeholder="colleague@example.com"
-                            className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm transition-shadow"
                         />
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Project Role</label>
+                        <label className="text-sm font-medium text-zinc-700">Project Role</label>
                         <select
                             value={role}
                             onChange={(e) => setRole(e.target.value)}
-                            className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm transition-shadow"
                         >
                             <option value="viewer">Viewer (Read-only)</option>
                             <option value="tester">Tester (Create Bugs)</option>

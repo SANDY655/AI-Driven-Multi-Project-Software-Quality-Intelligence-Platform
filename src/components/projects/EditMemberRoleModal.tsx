@@ -86,25 +86,25 @@ export function EditMemberRoleModal({ projectId, memberId, memberName, currentRo
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <button className="p-1 hover:bg-zinc-800 rounded-md text-zinc-500 hover:text-white transition-colors" title="Edit Role">
+                <button className="p-1 hover:bg-zinc-100 rounded-md text-zinc-400 hover:text-zinc-900 transition-colors" title="Edit Role">
                     <Edit2 className="h-3 w-3" />
                 </button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-zinc-800 text-zinc-100">
+            <DialogContent className="sm:max-w-[425px] bg-white border-zinc-200 text-zinc-900 shadow-xl rounded-2xl">
                 <DialogHeader>
                     <DialogTitle>Edit Member Role</DialogTitle>
-                    <DialogDescription className="text-zinc-400">
+                    <DialogDescription className="text-zinc-500">
                         Change the project permissions for <strong>{memberName}</strong>.
                     </DialogDescription>
                 </DialogHeader>
 
                 <form onSubmit={handleUpdate} className="space-y-4 py-4">
                     <div className="space-y-2">
-                        <label className="text-sm font-medium text-zinc-400 uppercase tracking-wider">Project Role</label>
+                        <label className="text-sm font-medium text-zinc-500 uppercase tracking-wider">Project Role</label>
                         <select
                             value={role}
                             onChange={(e) => setRole(e.target.value)}
-                            className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm transition-all"
                         >
                             <option value="viewer">Viewer (Read-only)</option>
                             <option value="tester">Tester (Create Bugs)</option>
@@ -130,7 +130,7 @@ export function EditMemberRoleModal({ projectId, memberId, memberName, currentRo
                             variant="ghost"
                             onClick={handleRemove}
                             disabled={loading}
-                            className="text-zinc-500 hover:text-red-400 hover:bg-red-500/10 w-full"
+                            className="text-zinc-500 hover:text-red-600 hover:bg-red-50 w-full transition-colors"
                         >
                             <Trash2 className="mr-2 h-4 w-4" />
                             Remove Member

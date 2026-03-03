@@ -63,37 +63,37 @@ export function EditProjectModal({ project, userRole, onSuccess }: EditProjectMo
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-9 w-9 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-all">
+                <Button variant="ghost" size="icon" className="h-9 w-9 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl transition-all">
                     <Settings className="h-4 w-4" />
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-zinc-800 text-zinc-100">
+            <DialogContent className="sm:max-w-[425px] bg-white border-zinc-200 text-zinc-900 shadow-xl rounded-2xl">
                 <DialogHeader>
                     <DialogTitle>Project Settings</DialogTitle>
-                    <DialogDescription className="text-zinc-400">
+                    <DialogDescription className="text-zinc-500">
                         Update the project name and description.
                     </DialogDescription>
                 </DialogHeader>
 
                 <form onSubmit={handleUpdate} className="space-y-4 py-4">
                     <div className="space-y-2">
-                        <label className="text-sm font-medium text-zinc-400 uppercase tracking-widest">Project Name</label>
+                        <label className="text-sm font-medium text-zinc-500 uppercase tracking-widest">Project Name</label>
                         <input
                             type="text"
                             required
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                            className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm transition-all"
                         />
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-sm font-medium text-zinc-400 uppercase tracking-widest">Description</label>
+                        <label className="text-sm font-medium text-zinc-500 uppercase tracking-widest">Description</label>
                         <textarea
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
                             rows={3}
-                            className="flex w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all resize-none"
+                            className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm transition-all resize-none"
                             placeholder="Briefly describe the project..."
                         />
                     </div>

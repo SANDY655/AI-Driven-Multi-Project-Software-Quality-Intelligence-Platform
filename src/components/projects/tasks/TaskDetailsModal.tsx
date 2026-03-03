@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Loader2, UserPlus, Trash2, Clock, MessageSquare, Activity } from 'lucide-react'
+import { Loader2, UserPlus, Trash2, Clock, MessageSquare, Activity, X } from 'lucide-react'
 
 interface TaskDetailsModalProps {
     taskId: string | null
@@ -193,7 +193,7 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
 
     return (
         <Dialog open={!!taskId} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="sm:max-w-[900px] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden bg-zinc-950 border-zinc-800">
+            <DialogContent showCloseButton={false} className="sm:max-w-[900px] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden bg-zinc-950 border-zinc-800">
                 {loading || !task ? (
                     <div className="flex-1 flex items-center justify-center">
                         <Loader2 className="h-8 w-8 animate-spin text-zinc-500" />
@@ -212,7 +212,7 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                                     {task.title}
                                 </DialogTitle>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
                                 {canDelete && (
                                     <Button
                                         variant="ghost"
@@ -221,16 +221,25 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                                         className="h-9 w-9 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                                         title="Delete Task"
                                     >
-                                        <Trash2 className="h-4 w-4" />
+                                        <Trash2 className="h-[18px] w-[18px]" />
                                     </Button>
                                 )}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={onClose}
+                                    className="h-9 w-9 text-zinc-500 hover:text-white transition-colors"
+                                    title="Close"
+                                >
+                                    <X className="h-5 w-5" />
+                                </Button>
                             </div>
                         </div>
 
                         {/* Body layout */}
                         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
                             {/* Main Content (Left) */}
-                            <div className="flex-1 flex flex-col h-full overflow-y-auto border-r border-zinc-800 p-6 space-y-8 no-scrollbar">
+                            <div className="w-[60%] flex flex-col h-full overflow-y-auto border-r border-zinc-800 p-6 space-y-8 no-scrollbar">
                                 {/* Description */}
                                 <section>
                                     <h3 className="text-xs font-semibold text-zinc-400 mb-4 uppercase tracking-widest flex items-center gap-2">
@@ -319,7 +328,7 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                             </div>
 
                             {/* Sidebar (Right) */}
-                            <div className="w-full md:w-72 bg-zinc-950 p-6 flex flex-col h-full overflow-y-auto no-scrollbar space-y-6">
+                            <div className="w-[40%] bg-zinc-950 p-6 flex flex-col h-full overflow-y-auto no-scrollbar space-y-6">
                                 {/* Attributes */}
                                 <div className="space-y-4">
                                     <div>
