@@ -108,24 +108,28 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                     Report Bug
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
-                    <DialogTitle>Report a New Bug</DialogTitle>
-                    <DialogDescription>
+            <DialogContent className="sm:max-w-[480px] rounded-[24px] p-6 bg-white border-zinc-100 shadow-xl gap-5">
+                <DialogHeader className="space-y-2 pb-1">
+                    <DialogTitle className="text-xl font-bold tracking-tight text-zinc-900">Report a New Bug</DialogTitle>
+                    <DialogDescription className="text-[15px] text-zinc-500">
                         Create a new issue ticket for this project.
                     </DialogDescription>
                 </DialogHeader>
 
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
                         <FormField
                             control={form.control}
                             name="title"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Bug Title</FormLabel>
+                                    <FormLabel className="text-sm font-semibold text-zinc-900">Bug Title</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="E.g. Login page crashes on retry" {...field} />
+                                        <Input
+                                            placeholder="E.g. Login page crashes on retry"
+                                            className="rounded-xl border-zinc-200 focus-visible:ring-zinc-900 h-11 text-base placeholder:text-zinc-400"
+                                            {...field}
+                                        />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -137,33 +141,37 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                             name="description"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Description</FormLabel>
+                                    <FormLabel className="text-sm font-semibold text-zinc-900">Description</FormLabel>
                                     <FormControl>
-                                        <Textarea placeholder="Provide detailed steps or description..." className="resize-none h-24" {...field} />
+                                        <Textarea
+                                            placeholder="Provide detailed steps or description..."
+                                            className="resize-none h-32 rounded-xl border-zinc-200 focus-visible:ring-zinc-900 text-base placeholder:text-zinc-400 p-4"
+                                            {...field}
+                                        />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
                             )}
                         />
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-6">
                             <FormField
                                 control={form.control}
                                 name="severity"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Severity</FormLabel>
+                                        <FormLabel className="text-sm font-semibold text-zinc-900">Severity</FormLabel>
                                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                                             <FormControl>
-                                                <SelectTrigger>
+                                                <SelectTrigger className="rounded-xl border-zinc-200 focus:ring-zinc-900 h-11 text-base">
                                                     <SelectValue placeholder="Select severity" />
                                                 </SelectTrigger>
                                             </FormControl>
-                                            <SelectContent>
-                                                <SelectItem value="low">Low</SelectItem>
-                                                <SelectItem value="medium">Medium</SelectItem>
-                                                <SelectItem value="high">High</SelectItem>
-                                                <SelectItem value="critical">Critical</SelectItem>
+                                            <SelectContent className="rounded-xl border-zinc-100 shadow-lg">
+                                                <SelectItem value="low" className="rounded-lg">Low</SelectItem>
+                                                <SelectItem value="medium" className="rounded-lg">Medium</SelectItem>
+                                                <SelectItem value="high" className="rounded-lg">High</SelectItem>
+                                                <SelectItem value="critical" className="rounded-lg">Critical</SelectItem>
                                             </SelectContent>
                                         </Select>
                                         <FormMessage />
@@ -176,18 +184,18 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                                 name="priority"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Priority</FormLabel>
+                                        <FormLabel className="text-sm font-semibold text-zinc-900">Priority</FormLabel>
                                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                                             <FormControl>
-                                                <SelectTrigger>
+                                                <SelectTrigger className="rounded-xl border-zinc-200 focus:ring-zinc-900 h-11 text-base">
                                                     <SelectValue placeholder="Select priority" />
                                                 </SelectTrigger>
                                             </FormControl>
-                                            <SelectContent>
-                                                <SelectItem value="P3">P3 - Low</SelectItem>
-                                                <SelectItem value="P2">P2 - Medium</SelectItem>
-                                                <SelectItem value="P1">P1 - High</SelectItem>
-                                                <SelectItem value="P0">P0 - Critical</SelectItem>
+                                            <SelectContent className="rounded-xl border-zinc-100 shadow-lg">
+                                                <SelectItem value="P3" className="rounded-lg">P3 - Low</SelectItem>
+                                                <SelectItem value="P2" className="rounded-lg">P2 - Medium</SelectItem>
+                                                <SelectItem value="P1" className="rounded-lg">P1 - High</SelectItem>
+                                                <SelectItem value="P0" className="rounded-lg">P0 - Critical</SelectItem>
                                             </SelectContent>
                                         </Select>
                                         <FormMessage />
@@ -196,11 +204,20 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                             />
                         </div>
 
-                        <div className="pt-4 flex justify-end gap-2">
-                            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                        <div className="pt-4 flex justify-end gap-3 border-t border-zinc-100 mt-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setOpen(false)}
+                                className="rounded-xl h-10 px-6 font-semibold border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+                            >
                                 Cancel
                             </Button>
-                            <Button type="submit" disabled={loading}>
+                            <Button
+                                type="submit"
+                                disabled={loading}
+                                className="rounded-xl h-10 px-8 font-semibold bg-zinc-900 text-white hover:bg-zinc-800"
+                            >
                                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 Create Bug
                             </Button>

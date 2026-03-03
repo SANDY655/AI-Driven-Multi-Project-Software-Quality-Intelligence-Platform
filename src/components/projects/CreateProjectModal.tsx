@@ -150,29 +150,29 @@ export function CreateProjectModal({ onSuccess }: { onSuccess: () => void }) {
     return (
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { form.reset(); setShowPatField(false) } }}>
             <DialogTrigger asChild>
-                <Button className="gap-2">
+                <Button className="gap-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-semibold h-11 px-6">
                     <Plus className="h-4 w-4" />
                     New Project
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[450px]">
-                <DialogHeader>
-                    <DialogTitle>Create New Project</DialogTitle>
-                    <DialogDescription>
+            <DialogContent className="sm:max-w-[480px] rounded-[24px] p-6 bg-white border-zinc-100 shadow-xl gap-5">
+                <DialogHeader className="space-y-2 pb-1">
+                    <DialogTitle className="text-xl font-bold tracking-tight text-zinc-900">Create New Project</DialogTitle>
+                    <DialogDescription className="text-[15px] text-zinc-500">
                         Link a GitHub repository to start tracking bugs and SLA metrics automatically. Supports both public and private repositories.
                     </DialogDescription>
                 </DialogHeader>
 
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
                         <FormField
                             control={form.control}
                             name="name"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Project Name</FormLabel>
+                                    <FormLabel className="text-sm font-semibold text-zinc-900">Project Name</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="E.g. E-Commerce API" {...field} />
+                                        <Input placeholder="E.g. E-Commerce API" className="rounded-xl border-zinc-200 focus-visible:ring-zinc-900 h-11 text-base placeholder:text-zinc-400" {...field} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -184,11 +184,11 @@ export function CreateProjectModal({ onSuccess }: { onSuccess: () => void }) {
                             name="projectCode"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Project Code</FormLabel>
+                                    <FormLabel className="text-sm font-semibold text-zinc-900">Project Code</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="E.g. ECOM" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase())} />
+                                        <Input placeholder="E.g. ECOM" className="rounded-xl border-zinc-200 focus-visible:ring-zinc-900 h-11 text-base placeholder:text-zinc-400" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase())} />
                                     </FormControl>
-                                    <FormDescription>Used as a prefix for bug IDs (e.g. BUG-ECOM-1)</FormDescription>
+                                    <FormDescription className="text-xs text-zinc-500">Used as a prefix for bug IDs (e.g. BUG-ECOM-1)</FormDescription>
                                     <FormMessage />
                                 </FormItem>
                             )}
@@ -199,11 +199,11 @@ export function CreateProjectModal({ onSuccess }: { onSuccess: () => void }) {
                             name="githubUrl"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>GitHub Repository URL</FormLabel>
+                                    <FormLabel className="text-sm font-semibold text-zinc-900">GitHub Repository URL</FormLabel>
                                     <FormControl>
                                         <div className="relative">
-                                            <Github className="absolute left-3 top-3 h-4 w-4 text-zinc-500" />
-                                            <Input placeholder="https://github.com/owner/repo" className="pl-9" {...field} />
+                                            <Github className="absolute left-3.5 top-3.5 h-4 w-4 text-zinc-400" />
+                                            <Input placeholder="https://github.com/owner/repo" className="pl-10 rounded-xl border-zinc-200 focus-visible:ring-zinc-900 h-11 text-base placeholder:text-zinc-400" {...field} />
                                         </div>
                                     </FormControl>
                                     <FormMessage />
@@ -236,13 +236,14 @@ export function CreateProjectModal({ onSuccess }: { onSuccess: () => void }) {
                                                 <Input
                                                     type="password"
                                                     placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                                                    className="rounded-xl border-zinc-200 focus-visible:ring-zinc-900 h-11 text-base placeholder:text-zinc-400"
                                                     {...field}
                                                 />
                                             </FormControl>
-                                            <FormDescription className="text-xs">
+                                            <FormDescription className="text-xs text-zinc-500">
                                                 Required for private repos. Needs <code className="bg-amber-50 px-1 rounded text-amber-700 border border-amber-200">repo</code> scope. Token is used once and never stored.
                                                 {session?.provider_token && (
-                                                    <span className="block mt-1 text-green-600">✓ Your GitHub OAuth token will be used automatically if this field is empty.</span>
+                                                    <span className="block mt-1 text-emerald-600 font-medium">✓ Your GitHub OAuth token will be used automatically if this field is empty.</span>
                                                 )}
                                             </FormDescription>
                                             <FormMessage />
@@ -252,8 +253,20 @@ export function CreateProjectModal({ onSuccess }: { onSuccess: () => void }) {
                             )}
                         </div>
 
-                        <div className="pt-4 flex justify-end">
-                            <Button type="submit" disabled={loading}>
+                        <div className="pt-4 flex justify-end gap-3 border-t border-zinc-100 mt-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setOpen(false)}
+                                className="rounded-xl h-10 px-6 font-semibold border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="submit"
+                                disabled={loading}
+                                className="rounded-xl h-10 px-8 font-semibold bg-[#6345FF] text-white hover:bg-[#5235E8]"
+                            >
                                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 Create & Sync
                             </Button>

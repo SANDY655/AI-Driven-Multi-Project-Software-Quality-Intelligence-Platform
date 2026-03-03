@@ -118,33 +118,33 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
                     Invite
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px] bg-white border-zinc-200 text-zinc-900 shadow-xl rounded-2xl">
-                <DialogHeader>
-                    <DialogTitle>Invite a Team Member</DialogTitle>
-                    <DialogDescription className="text-zinc-500">
+            <DialogContent className="sm:max-w-[425px] rounded-[24px] p-6 bg-white border-zinc-100 shadow-xl gap-5">
+                <DialogHeader className="space-y-2 pb-1">
+                    <DialogTitle className="text-xl font-bold tracking-tight text-zinc-900">Invite a Team Member</DialogTitle>
+                    <DialogDescription className="text-[15px] text-zinc-500">
                         Add an existing user to this project. They must have an account.
                     </DialogDescription>
                 </DialogHeader>
 
-                <form onSubmit={handleInvite} className="space-y-4 py-4">
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-zinc-700">User Email Address</label>
+                <form onSubmit={handleInvite} className="space-y-5">
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-semibold text-zinc-900">User Email Address</label>
                         <input
                             type="email"
                             required
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             placeholder="colleague@example.com"
-                            className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm transition-shadow"
+                            className="flex h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-900 shadow-sm transition-shadow"
                         />
                     </div>
 
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-zinc-700">Project Role</label>
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-semibold text-zinc-900">Project Role</label>
                         <select
                             value={role}
                             onChange={(e) => setRole(e.target.value)}
-                            className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm transition-shadow"
+                            className="flex h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 shadow-sm transition-shadow"
                         >
                             <option value="viewer">Viewer (Read-only)</option>
                             <option value="tester">Tester (Create Bugs)</option>
@@ -160,12 +160,24 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
                         </div>
                     )}
 
-                    <div className="flex justify-end pt-4">
-                        <Button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white w-full">
+                    <div className="pt-2 flex justify-end gap-3 border-t border-zinc-100 mt-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setOpen(false)}
+                            className="rounded-xl h-10 px-6 font-semibold border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="submit"
+                            disabled={loading}
+                            className="rounded-xl h-10 px-8 font-semibold bg-zinc-900 text-white hover:bg-zinc-800"
+                        >
                             {loading ? (
                                 <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Sending Invite...
+                                    Sending...
                                 </>
                             ) : (
                                 'Add Member'

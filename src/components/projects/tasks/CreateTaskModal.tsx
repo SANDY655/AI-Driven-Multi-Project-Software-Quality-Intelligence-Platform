@@ -105,24 +105,28 @@ export function CreateTaskModal({ projectId, projectCode, onSuccess }: CreateTas
                     Create Task
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
-                    <DialogTitle>Create a New Task</DialogTitle>
-                    <DialogDescription>
+            <DialogContent className="sm:max-w-[480px] rounded-[24px] p-6 bg-white border-zinc-100 shadow-xl gap-5">
+                <DialogHeader className="space-y-2 pb-1">
+                    <DialogTitle className="text-xl font-bold tracking-tight text-zinc-900">Create a New Task</DialogTitle>
+                    <DialogDescription className="text-[15px] text-zinc-500">
                         Create a new task ticket for this project.
                     </DialogDescription>
                 </DialogHeader>
 
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
                         <FormField
                             control={form.control}
                             name="title"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Task Title</FormLabel>
+                                    <FormLabel className="text-sm font-semibold text-zinc-900">Task Title</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="E.g. Update user profile schema" {...field} />
+                                        <Input
+                                            placeholder="E.g. Update user profile schema"
+                                            className="rounded-xl border-zinc-200 focus-visible:ring-zinc-900 h-11 text-base placeholder:text-zinc-400"
+                                            {...field}
+                                        />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -134,9 +138,13 @@ export function CreateTaskModal({ projectId, projectCode, onSuccess }: CreateTas
                             name="description"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Description</FormLabel>
+                                    <FormLabel className="text-sm font-semibold text-zinc-900">Description</FormLabel>
                                     <FormControl>
-                                        <Textarea placeholder="Provide detailed steps or description..." className="resize-none h-24" {...field} />
+                                        <Textarea
+                                            placeholder="Provide detailed steps or description..."
+                                            className="resize-none h-32 rounded-xl border-zinc-200 focus-visible:ring-zinc-900 text-base placeholder:text-zinc-400 p-4"
+                                            {...field}
+                                        />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -148,18 +156,18 @@ export function CreateTaskModal({ projectId, projectCode, onSuccess }: CreateTas
                             name="priority"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Priority</FormLabel>
+                                    <FormLabel className="text-sm font-semibold text-zinc-900">Priority</FormLabel>
                                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                                         <FormControl>
-                                            <SelectTrigger>
+                                            <SelectTrigger className="rounded-xl border-zinc-200 focus:ring-zinc-900 h-11 text-base">
                                                 <SelectValue placeholder="Select priority" />
                                             </SelectTrigger>
                                         </FormControl>
-                                        <SelectContent>
-                                            <SelectItem value="low">Low</SelectItem>
-                                            <SelectItem value="medium">Medium</SelectItem>
-                                            <SelectItem value="high">High</SelectItem>
-                                            <SelectItem value="urgent">Urgent</SelectItem>
+                                        <SelectContent className="rounded-xl border-zinc-100 shadow-lg">
+                                            <SelectItem value="low" className="rounded-lg">Low</SelectItem>
+                                            <SelectItem value="medium" className="rounded-lg">Medium</SelectItem>
+                                            <SelectItem value="high" className="rounded-lg">High</SelectItem>
+                                            <SelectItem value="urgent" className="rounded-lg">Urgent</SelectItem>
                                         </SelectContent>
                                     </Select>
                                     <FormMessage />
@@ -167,11 +175,20 @@ export function CreateTaskModal({ projectId, projectCode, onSuccess }: CreateTas
                             )}
                         />
 
-                        <div className="pt-4 flex justify-end gap-2">
-                            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                        <div className="pt-4 flex justify-end gap-3 border-t border-zinc-100 mt-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setOpen(false)}
+                                className="rounded-xl h-10 px-6 font-semibold border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+                            >
                                 Cancel
                             </Button>
-                            <Button type="submit" disabled={loading}>
+                            <Button
+                                type="submit"
+                                disabled={loading}
+                                className="rounded-xl h-10 px-8 font-semibold bg-zinc-900 text-white hover:bg-zinc-800"
+                            >
                                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 Create Task
                             </Button>
