@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Eye, EyeOff, Github, Bug } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, Github, Bug } from 'lucide-react'
 
 export function Login() {
     const [email, setEmail] = useState('')
@@ -39,43 +39,25 @@ export function Login() {
         if (error) setError(error.message)
     }
 
+    const handleGoogleLogin = async () => {
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+        })
+        if (error) setError(error.message)
+    }
+
     return (
-        <div className="min-h-screen bg-white flex flex-col md:flex-row w-full font-sans">
+        <div className="min-h-screen bg-[#f8f9fa] flex flex-col md:flex-row w-full font-sans">
 
-            {/* Left Side: Visual Splash */}
-            <div className="w-full md:w-1/2 relative hidden md:block border-r border-zinc-100 min-h-screen">
-                <img
-                    src="/login_splash.png"
-                    alt="Colorful abstract waves"
-                    className="absolute inset-0 w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-12">
-                    <div className="flex items-center gap-2 mb-6 text-white/90">
-                        <Bug className="w-8 h-8" />
-                        <span className="font-bold text-xl drop-shadow-md">BugTracker</span>
-                    </div>
-                    <h1 className="text-white text-4xl lg:text-5xl font-serif font-bold leading-tight drop-shadow-lg max-w-sm">
-                        Get Everything You Want
-                    </h1>
-                </div>
-            </div>
-
-            {/* Right Side: Login Form */}
-            <div className="w-full md:w-1/2 flex flex-col justify-center px-8 sm:px-16 lg:px-24 py-12 bg-white">
-                <div className="w-full max-w-sm mx-auto">
-
-                    {/* Mobile Header */}
-                    <div className="flex items-center gap-2 mb-8 md:hidden text-zinc-900">
-                        <Bug className="w-8 h-8 text-blue-600" />
-                        <span className="font-bold text-xl">BugTracker</span>
+            {/* Left Side: Login Form */}
+            <div className="w-full md:w-1/2 flex flex-col justify-center px-8 sm:px-16 lg:px-32 py-12 lg:py-0 relative z-10">
+                <div className="w-full max-w-[380px] mx-auto">
+                    {/* Header */}
+                    <div className="flex flex-col items-center mb-8 text-zinc-900 text-center">
+                        <h2 className="text-[2.5rem] font-bold text-zinc-900 mb-1 tracking-tight">Sign in</h2>
                     </div>
 
-                    <div className="mb-8">
-                        <h2 className="text-3xl font-extrabold text-zinc-900 mb-2 font-serif">Welcome back</h2>
-                        <p className="text-zinc-500 text-sm">Please enter your details to sign in.</p>
-                    </div>
-
-                    <form onSubmit={handleLogin} className="space-y-5">
+                    <form onSubmit={handleLogin} className="space-y-4">
                         {error && (
                             <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-xl text-sm font-medium">
                                 {error}
@@ -83,27 +65,35 @@ export function Login() {
                         )}
 
                         <div>
-                            <label className="block text-sm font-semibold text-zinc-700 mb-1.5" htmlFor="email">Email</label>
-                            <input
-                                id="email"
-                                type="email"
-                                required
-                                className="w-full px-4 py-3 bg-zinc-100 border-transparent rounded-[12px] text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:bg-white transition-all text-sm"
-                                placeholder="Enter your email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                            />
+                            <label className="block text-xs font-bold text-zinc-800 mb-2 tracking-wide" htmlFor="email">Email Address</label>
+                            <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                    <Mail className="h-[18px] w-[18px] text-zinc-400" />
+                                </div>
+                                <input
+                                    id="email"
+                                    type="email"
+                                    required
+                                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-zinc-200/80 rounded-xl text-zinc-900 placeholder-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent transition-all text-sm shadow-[0_2px_8px_rgba(0,0,0,0.04)]"
+                                    placeholder="johndoe@gmail.com"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                />
+                            </div>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-semibold text-zinc-700 mb-1.5" htmlFor="password">Password</label>
+                            <label className="block text-xs font-bold text-zinc-800 mb-2 tracking-wide" htmlFor="password">Password</label>
                             <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                    <Lock className="h-[18px] w-[18px] text-zinc-400" />
+                                </div>
                                 <input
                                     id="password"
                                     type={showPassword ? "text" : "password"}
                                     required
-                                    className="w-full px-4 py-3 bg-zinc-100 border-transparent rounded-[12px] text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:bg-white transition-all text-sm pr-12"
-                                    placeholder="••••••••"
+                                    className="w-full pl-10 pr-12 py-2.5 bg-white border border-zinc-200/80 rounded-xl text-zinc-900 placeholder-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent transition-all text-sm shadow-[0_2px_8px_rgba(0,0,0,0.04)] tracking-wider"
+                                    placeholder="••••••"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                 />
@@ -112,51 +102,113 @@ export function Login() {
                                     onClick={() => setShowPassword(!showPassword)}
                                     className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 focus:outline-none flex items-center justify-center p-1"
                                 >
-                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                    {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
                                 </button>
                             </div>
                         </div>
 
-                        <div className="flex items-center justify-between text-sm pt-1">
-                            <label className="flex items-center cursor-pointer group">
-                                <input type="checkbox" className="rounded text-zinc-900 focus:ring-zinc-900 border-zinc-300 w-4 h-4 cursor-pointer" />
-                                <span className="ml-2 text-zinc-600 group-hover:text-zinc-900 transition-colors font-medium">Remember me</span>
-                            </label>
-                            <a href="#" className="font-semibold text-zinc-900 hover:underline">
-                                Forgot password?
-                            </a>
-                        </div>
+                        <div className="flex flex-col gap-4 pt-1">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <input type="checkbox" id="remember" className="rounded-sm text-zinc-900 focus:ring-zinc-900 border-zinc-300 w-4 h-4 cursor-pointer" />
+                                    <label htmlFor="remember" className="text-sm font-bold text-zinc-900 cursor-pointer">Remember me</label>
+                                </div>
+                                <Link to="/forgot-password" className="text-sm font-bold text-zinc-800 hover:text-zinc-600 hover:underline transition-colors">Forgot Password ?</Link>
+                            </div>
 
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full py-3 px-4 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold rounded-[12px] shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-900 disabled:opacity-70 flex justify-center items-center mt-6"
-                        >
-                            {loading ? 'Signing in...' : 'Sign in'}
-                        </button>
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="w-full py-3 px-4 bg-[#18181b] hover:bg-black text-white font-semibold rounded-xl shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-900 disabled:opacity-70 flex justify-center items-center mt-2"
+                            >
+                                {loading ? 'Logging in...' : 'Login'}
+                            </button>
+                        </div>
                     </form>
 
-                    <div className="mt-6 flex items-center justify-center space-x-4">
+                    <div className="mt-6 flex items-center justify-center space-x-4 mb-6">
                         <div className="flex-1 border-t border-zinc-200"></div>
-                        <span className="text-sm text-zinc-500 font-medium">Or</span>
+                        <span className="text-sm text-zinc-400 font-medium tracking-wide">Or login with</span>
                         <div className="flex-1 border-t border-zinc-200"></div>
                     </div>
 
-                    <button
-                        type="button"
-                        onClick={handleGithubLogin}
-                        className="mt-6 w-full flex items-center justify-center gap-3 py-3 px-4 bg-white border border-zinc-200 text-zinc-700 font-semibold rounded-[12px] hover:bg-zinc-50 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-200 shadow-sm"
-                    >
-                        <Github className="w-5 h-5" />
-                        Sign in with GitHub
-                    </button>
+                    <div className="flex items-center gap-4">
+                        <button type="button" onClick={handleGoogleLogin} className="flex-1 h-[48px] flex items-center justify-center bg-white rounded-xl border border-zinc-200 hover:bg-zinc-50 transition-all hover:border-zinc-300 shadow-sm">
+                            <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />
+                        </button>
+                        <button type="button" onClick={handleGithubLogin} className="flex-1 h-[48px] flex items-center justify-center bg-white rounded-xl border border-zinc-200 hover:bg-zinc-50 transition-all hover:border-zinc-300 shadow-sm">
+                            <Github className="w-5 h-5 text-[#181717]" />
+                        </button>
+                        <button type="button" className="flex-1 h-[48px] flex items-center justify-center bg-white rounded-xl border border-zinc-200 hover:bg-zinc-50 transition-all hover:border-zinc-300 shadow-sm">
+                            <img src="https://www.svgrepo.com/show/475647/facebook-color.svg" alt="Facebook" className="w-5 h-5" />
+                        </button>
+                    </div>
 
-                    <p className="mt-8 text-center text-sm text-zinc-600">
-                        Don't have an account?{' '}
-                        <Link to="/register" className="font-semibold text-zinc-900 hover:underline">
-                            Sign up for free
-                        </Link>
-                    </p>
+                    <div className="mt-6 text-center text-sm text-zinc-500">
+                        Don't have an account? <Link to="/register" className="font-bold text-zinc-900 hover:underline">Sign up</Link>
+                    </div>
+
+                </div>
+            </div>
+
+            {/* Right Side: Visual Splash Container */}
+            <div className="w-full md:w-1/2 hidden md:flex items-center justify-center p-6 lg:p-8">
+                {/* Main Dark Card */}
+                <div className="w-full h-full max-h-[92vh] bg-[#0c0c0e] rounded-[48px] relative overflow-hidden flex flex-col justify-end p-12 lg:p-16 shadow-2xl">
+
+                    {/* Abstract 'A' Logo Graphic in Background */}
+                    <div className="absolute inset-0 flex items-start justify-center pt-24 opacity-80 pointer-events-none">
+                        <div className="relative w-80 h-80 lg:w-[400px] lg:h-[400px]">
+                            <svg viewBox="0 0 100 100" className="w-full h-full text-[#1c1c1e] drop-shadow-2xl opacity-90">
+                                <polygon points="50,10 90,90 10,90" fill="currentColor" />
+                                <polygon points="50,25 75,80 25,80" fill="#0c0c0e" />
+                                {/* Overlay polygon to create depth */}
+                                <polygon points="50,40 62,68 38,68" fill="#2a2a2a" />
+                            </svg>
+                            {/* Decorative angled light rays */}
+                            <div className="absolute top-[-50%] right-[-70%] w-[150%] h-[200px] bg-gradient-to-r from-transparent via-white/5 to-transparent transform rotate-45 blur-2xl"></div>
+                            <div className="absolute top-[0%] right-[-50%] w-[150%] h-[5px] bg-gradient-to-r from-transparent via-white/10 to-transparent transform rotate-[35deg] blur-[1px]"></div>
+                        </div>
+                    </div>
+
+                    {/* Left aligned content in the card */}
+                    <div className="relative z-10 w-full max-w-lg">
+                        <div className="flex flex-col items-center justify-center gap-4 mb-12 w-full">
+                            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-md border border-white/10 shadow-xl">
+                                <Bug className="w-7 h-7 text-white" />
+                            </div>
+                            <span className="font-bold text-white tracking-wider text-xl">BugTracker</span>
+                        </div>
+                        <h2 className="text-white text-3xl lg:text-[2.5rem] font-bold mb-4 tracking-tight leading-tight">
+                            Welcome to BugTracker
+                        </h2>
+                        <p className="text-zinc-400 text-sm md:text-xs lg:text-sm max-w-[340px] mb-8 leading-relaxed">
+                            Sign in to access your projects, review AI predictions, identify vulnerabilities, and collaborate seamlessly with your dedicated engineering team.
+                        </p>
+                        <p className="text-zinc-500 text-xs mb-16 lg:mb-24">
+                            Log back in to continue improving your codebase
+                        </p>
+                    </div>
+
+                    {/* Floating Sub-Card */}
+                    <div className="absolute bottom-6 lg:bottom-8 right-6 lg:right-8 w-[240px] lg:w-[260px] bg-[#2d2d2f]/95 backdrop-blur-md border border-white/5 rounded-2xl p-4 shadow-2xl z-20">
+                        <h3 className="text-white text-sm lg:text-base font-medium mb-1.5 leading-snug">
+                            AI-Powered Quality<br />Intelligence
+                        </h3>
+                        <p className="text-zinc-400 text-[9px] lg:text-[10px] mb-3 leading-relaxed">
+                            Elevate your software quality across all your projects with our advanced AI analytics and deep insights.
+                        </p>
+                        {/* Avatars */}
+                        <div className="flex -space-x-1.5">
+                            <img className="w-6 h-6 rounded-full border-[2px] border-[#2d2d2f]" src="https://ui-avatars.com/api/?name=Dev&background=0D8ABC&color=fff&font-size=0.4" alt="Developer" />
+                            <img className="w-6 h-6 rounded-full border-[2px] border-[#2d2d2f]" src="https://ui-avatars.com/api/?name=QA&background=4CAF50&color=fff&font-size=0.4" alt="QA Engineer" />
+                            <img className="w-6 h-6 rounded-full border-[2px] border-[#2d2d2f]" src="https://ui-avatars.com/api/?name=PM&background=FF9800&color=fff&font-size=0.4" alt="Product Manager" />
+                            <div className="w-6 h-6 rounded-full border-[2px] border-[#2d2d2f] bg-zinc-800 flex items-center justify-center text-[8px] text-white font-semibold">
+                                +2
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 
