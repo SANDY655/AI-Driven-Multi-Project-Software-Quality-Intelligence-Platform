@@ -6,10 +6,11 @@ import { getRepoContributors, getRepoCollaborators } from '../lib/github'
 import { InviteMemberModal } from '../components/projects/InviteMemberModal'
 import { EditMemberRoleModal } from '../components/projects/EditMemberRoleModal'
 import { EditProjectModal } from '../components/projects/EditProjectModal'
+import { DeleteProjectModal } from '../components/projects/DeleteProjectModal'
 import { CreateBugModal } from '../components/projects/CreateBugModal'
 import { CreateTaskModal } from '../components/projects/tasks/CreateTaskModal'
+import { Github, Users, Bug, AlertCircle, ArrowLeft, Columns, ExternalLink, CheckSquare, Lock, ShieldCheck, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Github, Users, Bug, AlertCircle, ArrowLeft, Trash2, Columns, ExternalLink, CheckSquare, Lock, ShieldCheck } from 'lucide-react'
 
 interface Project {
     id: string
@@ -139,12 +140,6 @@ export function ProjectDashboard() {
     const handleDeleteProject = async () => {
         if (!project || !user) return
 
-        const confirmed = window.confirm(
-            `Are you sure you want to delete "${project.name}"? This action is permanent and will remove all associated bugs and data.`
-        )
-
-        if (!confirmed) return
-
         setLoading(true)
         try {
             const { error } = await supabase
@@ -158,6 +153,7 @@ export function ProjectDashboard() {
         } catch (err: any) {
             alert(err.message)
             setLoading(false)
+            throw err
         }
     }
 
@@ -217,28 +213,39 @@ export function ProjectDashboard() {
                     </div>
                 </div>
 
-                {/* Project Actions - Only for admins/creators */}
+                {/* Project Actions */}
                 {(() => {
                     const userMember = project.project_members?.find(m => m.profiles.id === user?.id);
                     const userRole = userMember?.project_role;
                     const canManageProject = ['admin', 'pm'].includes(userRole || '') || project.created_by === user?.id;
 
-                    return canManageProject && (
+                    return (
                         <div className="flex items-center gap-2">
-                            <EditProjectModal
-                                project={project}
-                                userRole={userRole}
-                                onSuccess={handleAssignSuccess}
-                            />
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={handleDeleteProject}
-                                className="bg-white border-zinc-200 text-zinc-600 hover:text-red-600 hover:bg-red-50 hover:border-red-200 gap-2 transition-all h-9"
+                                asChild
+                                className="bg-white border-zinc-200 text-zinc-600 hover:text-blue-600 hover:bg-blue-50 transition-all h-9 gap-2"
                             >
-                                <Trash2 className="h-4 w-4" />
-                                Delete Project
+                                <a href={`${project.github_repo_url || `https://github.com/${project.github_owner}/${project.github_repo}`}/archive/HEAD.zip`} target="_blank" rel="noreferrer">
+                                    <Download className="h-4 w-4" />
+                                    Download ZIP
+                                </a>
                             </Button>
+
+                            {canManageProject && (
+                                <>
+                                    <EditProjectModal
+                                        project={project}
+                                        userRole={userRole}
+                                        onSuccess={handleAssignSuccess}
+                                    />
+                                    <DeleteProjectModal
+                                        project={project}
+                                        onConfirm={handleDeleteProject}
+                                    />
+                                </>
+                            )}
                         </div>
                     );
                 })()}
