@@ -39,13 +39,6 @@ export function Login() {
         if (error) setError(error.message)
     }
 
-    const handleGoogleLogin = async () => {
-        const { error } = await supabase.auth.signInWithOAuth({
-            provider: 'google',
-        })
-        if (error) setError(error.message)
-    }
-
     return (
         <div className="min-h-screen bg-[#f8f9fa] flex flex-col md:flex-row w-full font-sans">
 
@@ -133,14 +126,9 @@ export function Login() {
                     </div>
 
                     <div className="flex items-center gap-4">
-                        <button type="button" onClick={handleGoogleLogin} className="flex-1 h-[48px] flex items-center justify-center bg-white rounded-xl border border-zinc-200 hover:bg-zinc-50 transition-all hover:border-zinc-300 shadow-sm">
-                            <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />
-                        </button>
-                        <button type="button" onClick={handleGithubLogin} className="flex-1 h-[48px] flex items-center justify-center bg-white rounded-xl border border-zinc-200 hover:bg-zinc-50 transition-all hover:border-zinc-300 shadow-sm">
+                        <button type="button" onClick={handleGithubLogin} className="w-full h-[48px] flex items-center justify-center bg-white rounded-xl border border-zinc-200 hover:bg-zinc-50 transition-all hover:border-zinc-300 shadow-sm gap-2">
                             <Github className="w-5 h-5 text-[#181717]" />
-                        </button>
-                        <button type="button" className="flex-1 h-[48px] flex items-center justify-center bg-white rounded-xl border border-zinc-200 hover:bg-zinc-50 transition-all hover:border-zinc-300 shadow-sm">
-                            <img src="https://www.svgrepo.com/show/475647/facebook-color.svg" alt="Facebook" className="w-5 h-5" />
+                            <span className="text-sm font-semibold text-zinc-700">Continue with GitHub</span>
                         </button>
                     </div>
 

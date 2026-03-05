@@ -12,6 +12,25 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ProfileSettingsModal } from '../projects/ProfileSettingsModal'
+import { useDebounce } from 'use-debounce'
+import { Search } from 'lucide-react'
+
+// Reuse the Project interface
+interface Project {
+    id: string
+    name: string
+    project_code: string
+    description: string
+    github_repo: string
+    github_owner: string
+    github_details: {
+        private?: boolean;
+        description?: string;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        [key: string]: any;
+    }
+    updated_at: string
+}
 
 interface Profile {
     display_name: string
@@ -26,10 +45,38 @@ export function AppLayout() {
     const [profile, setProfile] = useState<Profile | null>(null)
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
 
+    // Search State
+    const [searchQuery, setSearchQuery] = useState('')
+    const [debouncedSearchQuery] = useDebounce(searchQuery, 300)
+    const [projects, setProjects] = useState<Project[]>([])
+    const [isSearchFocused, setIsSearchFocused] = useState(false)
+
     // Check if the route is the dashboard Home
     const isDashboardPath = location.pathname === '/'
     // Check if the route is a board view
     const isBoardView = location.pathname.endsWith('/board') || location.pathname.endsWith('/tasks')
+
+    // Fetch projects for search
+    useEffect(() => {
+        async function loadProjects() {
+            if (!user) return
+            const { data: projectsData, error } = await supabase
+                .from('projects')
+                .select('*, project_members!inner(project_id)')
+                .eq('project_members.user_id', user.id)
+                .order('updated_at', { ascending: false })
+
+            if (projectsData && !error) {
+                setProjects(projectsData)
+            }
+        }
+        loadProjects()
+    }, [user])
+
+    const filteredSearchProjects = projects.filter(p =>
+        p.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+        p.project_code.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+    )
 
     useEffect(() => {
         async function loadProfile() {
@@ -129,14 +176,69 @@ export function AppLayout() {
                 {!isBoardView && (
                     <header className="h-[100px] flex-shrink-0 bg-transparent flex items-center px-10 justify-between sticky top-0 z-20">
 
-                        {/* Empty Search Bar Placeholder based on design */}
-                        <div className="flex-1 max-w-xl hidden md:flex">
-                            <div className="w-full bg-white rounded-full border border-zinc-100/80 px-5 py-2.5 flex items-center shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] text-sm">
-                                <svg className="w-4 h-4 text-zinc-400 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                </svg>
-                                <span className="text-zinc-400">Search your course....</span>
+                        {/* Flexible Search Bar */}
+                        <div className="flex-1 max-w-xl hidden md:flex relative z-50">
+                            <div className={`w-full bg-white rounded-2xl border ${isSearchFocused ? 'border-indigo-500 ring-4 ring-indigo-50' : 'border-zinc-200/80'} px-5 py-2.5 flex items-center shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] transition-all`}>
+                                <Search className={`w-4 h-4 mr-3 transition-colors ${isSearchFocused ? 'text-indigo-500' : 'text-zinc-400'}`} />
+                                <input
+                                    type="text"
+                                    placeholder="Search your Project..."
+                                    className="bg-transparent border-none outline-none w-full text-sm text-zinc-800 placeholder:text-zinc-400 font-medium"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onFocus={() => setIsSearchFocused(true)}
+                                    onBlur={() => {
+                                        // Slight delay to allow clicking on results
+                                        setTimeout(() => setIsSearchFocused(false), 200)
+                                    }}
+                                />
                             </div>
+
+                            {/* Search Results Dropdown */}
+                            {isSearchFocused && searchQuery.length > 0 && (
+                                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-zinc-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                                    <div className="p-2 max-h-[300px] overflow-y-auto">
+                                        <div className="px-3 py-2 text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1">
+                                            Projects
+                                        </div>
+                                        {filteredSearchProjects.length > 0 ? (
+                                            filteredSearchProjects.map(project => (
+                                                <Link
+                                                    key={project.id}
+                                                    to={`/projects/${project.id}`}
+                                                    className="flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-50 rounded-xl transition-colors group"
+                                                    onMouseDown={(e) => {
+                                                        // Prevent default to stop the input from losing focus immediately before navigation happens
+                                                        e.preventDefault();
+                                                    }}
+                                                    onClick={() => {
+                                                        setSearchQuery('')
+                                                        setIsSearchFocused(false)
+                                                    }}
+                                                >
+                                                    <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-100 transition-colors">
+                                                        <LayoutDashboard className="w-4 h-4" />
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <h4 className="text-sm font-bold text-zinc-900 truncate group-hover:text-indigo-600 transition-colors">
+                                                            {project.name}
+                                                        </h4>
+                                                        <p className="text-xs text-zinc-500 truncate flex items-center gap-2">
+                                                            <span className="font-semibold text-zinc-400">{project.project_code}</span>
+                                                            <span className="w-1 h-1 rounded-full bg-zinc-300"></span>
+                                                            {project.github_owner}/{project.github_repo}
+                                                        </p>
+                                                    </div>
+                                                </Link>
+                                            ))
+                                        ) : (
+                                            <div className="px-3 py-6 text-center text-sm text-zinc-500">
+                                                No projects found matching "{searchQuery}"
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex items-center gap-5 ml-auto">
