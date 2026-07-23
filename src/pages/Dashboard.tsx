@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { CreateProjectModal } from '../components/projects/CreateProjectModal'
-import { FolderGit2, Lock, ArrowUpRight, CircleDashed, Briefcase, Flame, User, MoreVertical, Radar, Network } from 'lucide-react'
+import { FolderGit2, Lock, ArrowUpRight, CircleDashed, Briefcase, Flame, User, MoreVertical, Radar, Network, Bot } from 'lucide-react'
+import { aiClient } from '../lib/ai-client'
 
 interface Profile {
     display_name: string
@@ -33,6 +34,7 @@ export function Dashboard() {
     const [profile, setProfile] = useState<Profile | null>(null)
     const [projects, setProjects] = useState<Project[]>([])
     const [loading, setLoading] = useState(true)
+    const [aiTesting, setAiTesting] = useState(false)
 
     const loadData = useCallback(async () => {
         if (!user) return
@@ -60,7 +62,6 @@ export function Dashboard() {
     }, [user])
 
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadData()
     }, [loadData])
 
@@ -80,11 +81,48 @@ export function Dashboard() {
         return 'Good evening'
     }
 
+    const testAIEngine = async () => {
+        setAiTesting(true);
+        try {
+            const response = await aiClient.analyzeBug({
+                title: "App crashes on login",
+                description: "When I click the login button with a valid email, the screen goes white and crashes.",
+                project_id: projects.length > 0 ? projects[0].id : null
+            });
+            alert(`AI Prediction:\nPriority: ${response.prediction.priority}\nSeverity: ${response.prediction.severity}\n\nRationale:\n${response.prediction.rationale}`);
+        } catch (error) {
+            console.error("AI test failed:", error);
+            alert("AI test failed. Make sure the Python server is running on port 8000!");
+        } finally {
+            setAiTesting(false);
+        }
+    }
+
     return (
         <div className="flex flex-col xl:flex-row gap-8 min-h-full font-sans pb-8 -mt-2">
 
             {/* Main Left Content */}
             <div className="flex-1 min-w-0 space-y-8">
+            
+                {/* AI Testing Card - MOVED TO TOP FOR VISIBILITY */}
+                <div className="bg-indigo-50 rounded-[24px] p-6 shadow-sm border border-indigo-200 flex flex-col md:flex-row items-center justify-between text-left gap-6">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0">
+                            <Bot className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-indigo-900 mb-1">Test AI Engine (RAG)</h3>
+                            <p className="text-sm text-indigo-700/80 m-0">Run a mock bug through the local RAG engine to test Priority and Severity prediction.</p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={testAIEngine}
+                        disabled={aiTesting}
+                        className="py-3 px-6 bg-[#634AF9] hover:bg-[#523AE0] text-white rounded-xl font-semibold transition-colors disabled:opacity-50 whitespace-nowrap shadow-sm"
+                    >
+                        {aiTesting ? 'Analyzing...' : 'Run Test Analysis'}
+                    </button>
+                </div>
 
                 {/* Hero Banner */}
                 <div className="relative overflow-hidden rounded-[32px] bg-[#634AF9] text-white p-8 md:p-10 shadow-lg w-full flex flex-col justify-center min-h-[220px]">
@@ -277,7 +315,6 @@ export function Dashboard() {
                     </div>
                 </div>
 
-                {/* Could add a Recent Activity or mentors here, but strictly sticking to necessary elements */}
             </div>
 
         </div>
