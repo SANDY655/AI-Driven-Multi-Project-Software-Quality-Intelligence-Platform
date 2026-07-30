@@ -85,6 +85,25 @@ export function CreateTaskModal({ projectId, projectCode, onSuccess }: CreateTas
                 })
 
             if (insertError) throw insertError
+            
+            const newTaskId = insertError ? null : (await supabase.from('tasks').select('id').eq('task_display_id', taskDisplayId).single()).data?.id
+            
+            // 3. Generate embedding for semantic search
+            if (newTaskId) {
+                try {
+                    await fetch('http://localhost:8000/api/embed-task', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            task_id: newTaskId,
+                            title: values.title,
+                            description: values.description
+                        })
+                    })
+                } catch (embedError) {
+                    console.error("Failed to generate task embedding", embedError)
+                }
+            }
 
             setOpen(false)
             form.reset()

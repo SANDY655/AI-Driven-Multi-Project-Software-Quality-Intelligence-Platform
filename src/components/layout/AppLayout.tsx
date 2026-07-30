@@ -14,6 +14,7 @@ import {
 import { ProfileSettingsModal } from '../projects/ProfileSettingsModal'
 import { useDebounce } from 'use-debounce'
 import { Search } from 'lucide-react'
+import { AIChatAssistant } from '../projects/AIChatAssistant'
 
 // Reuse the Project interface
 interface Project {
@@ -305,6 +306,8 @@ export function AppLayout() {
                     user={user}
                     profile={profile}
                 />
+                
+                <AIChatAssistant />
             </main>
         </div>
     )

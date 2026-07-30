@@ -38,9 +38,9 @@ def get_embedding(text: str) -> list[float]:
         hash_obj = hashlib.sha256(text.encode())
         hash_hex = hash_obj.hexdigest()
         
-        # Convert hex to float array (384 dimensions for nomic-embed-text)
+        # Convert hex to float array (768 dimensions)
         embedding = []
-        for i in range(0, 384):
+        for i in range(0, 768):
             char_idx = (i * 2) % len(hash_hex)
             byte_val = int(hash_hex[char_idx:char_idx+2], 16) if char_idx+2 <= len(hash_hex) else 0
             embedding.append((byte_val - 128) / 128.0)
@@ -125,18 +125,27 @@ JSON Response:"""
             "rationale": f"Error during analysis: {str(e)}"
         }
 
-def recommend_developer(bug_title: str, bug_description: str, similar_bugs: list, project_details: dict | None = None) -> dict:
+def recommend_developer(bug_title: str, bug_description: str, similar_bugs: list, project_details: dict | None = None, project_members: list | None = None) -> dict:
     """Uses local Llama model to recommend an assignee based on who fixed similar bugs and project context."""
     context = format_bug_context(similar_bugs)
     
     project_context = ""
     if project_details:
         project_context = f"\nProject Context:\nName: {project_details.get('name')}\nDescription: {project_details.get('description')}\nLanguage/Tech: {project_details.get('github_details', {}).get('language', 'Unknown')}\n"
+        
+    members_context = ""
+    if project_members:
+        members_context = "\nAvailable Developers:\n"
+        for member in project_members:
+            user_id = member.get("user_id")
+            profiles = member.get("profiles", {})
+            name = profiles.get("display_name", "Unknown") if profiles else "Unknown"
+            members_context += f"- Name: {name}, ID: {user_id}\n"
     
     prompt = f"""You are a technical project manager. Your task is to assign a new bug to the most appropriate developer.
 Look at the historical context of similar bugs and see which developer (by UUID) resolved them.
-If a particular developer consistently handles this type of issue, recommend them.
-{project_context}
+If a particular developer consistently handles this type of issue, recommend them. Also consider the Available Developers list.
+{project_context}{members_context}
 Historical Context (Similar Bugs):
 {context}
 
@@ -186,3 +195,130 @@ JSON Response:"""
             "recommended_developer_id": "00000000-0000-0000-0000-000000000000",
             "rationale": f"Error during recommendation: {str(e)}"
         }
+
+def review_commit(bug_title: str, bug_description: str, commit_message: str, commit_diff: str) -> dict:
+    """Uses local Llama model to review a commit diff against the original bug report."""
+    prompt = f"""You are an expert Senior Software Engineer performing a code review.
+Your task is to determine if the provided git diff safely and accurately resolves the reported bug.
+Provide constructive feedback, identify potential regressions, and give a final approval status.
+
+Bug Report:
+Title: {bug_title}
+Description: {bug_description}
+
+Commit Message:
+{commit_message}
+
+Git Diff:
+{commit_diff}
+
+Respond with a JSON object containing exactly these fields:
+- status: one of 'approved', 'changes_requested', 'neutral'
+- feedback: detailed code review comment explaining your reasoning
+
+JSON Response:"""
+
+    try:
+        response = requests.post(
+            f"{OLLAMA_BASE_URL}/api/generate",
+            json={
+                "model": LLM_MODEL,
+                "prompt": prompt,
+                "stream": False,
+                "format": "json"
+            },
+            timeout=120
+        )
+        response.raise_for_status()
+        response_text = response.json()["response"]
+        
+        try:
+            result = json.loads(response_text)
+            return result
+        except json.JSONDecodeError:
+            json_start = response_text.find('{')
+            json_end = response_text.rfind('}') + 1
+            if json_start >= 0 and json_end > json_start:
+                return json.loads(response_text[json_start:json_end])
+            return {
+                "status": "neutral",
+                "feedback": "Failed to parse AI response."
+            }
+    except Exception as e:
+        print(f"Error calling Ollama for code review: {e}")
+        return {
+            "status": "neutral",
+            "feedback": f"Error during code review generation: {str(e)}"
+        }
+
+def fetch_similar_tasks(query_embedding: list[float], threshold: float = 0.5, count: int = 5, project_id: str | None = None) -> list:
+    """Uses the pgvector match_tasks RPC to find similar tasks."""
+    try:
+        response = supabase.rpc(
+            "match_tasks",
+            {
+                "query_embedding": query_embedding,
+                "match_threshold": threshold,
+                "match_count": count,
+                "filter_project_id": project_id
+            }
+        ).execute()
+        return response.data
+    except Exception as e:
+        print(f"Error fetching similar tasks: {e}")
+        return []
+
+def format_task_context(tasks: list) -> str:
+    if not tasks:
+        return "No relevant past tasks found."
+    
+    context = ""
+    for task in tasks:
+        context += f"Task ID: {task.get('task_display_id')}\n"
+        context += f"Title: {task.get('title')}\n"
+        context += f"Priority: {task.get('priority')}\n"
+        context += f"Description: {task.get('description')}\n"
+        context += "---\n"
+    return context
+
+def generate_chat_response(query: str, similar_bugs: list, similar_tasks: list, project_details: dict | None = None) -> str:
+    """Uses local Llama model to answer a query based on a context of similar bugs and tasks."""
+    bug_context = format_bug_context(similar_bugs)
+    task_context = format_task_context(similar_tasks)
+    
+    project_context = ""
+    if project_details:
+        project_context = f"Project Context:\nName: {project_details.get('name')}\nDescription: {project_details.get('description')}\n"
+    
+    prompt = f"""You are a helpful AI Assistant for a software development team.
+Your task is to answer the user's question based ONLY on the provided historical context and project context.
+If you don't know the answer based on the context, just say you don't have enough information.
+Keep your response concise and professional.
+
+{project_context}
+Historical Context (Similar Bugs):
+{bug_context}
+
+Historical Context (Similar Tasks):
+{task_context}
+
+User Question: {query}
+
+Answer:"""
+    
+    try:
+        response = requests.post(
+            f"{OLLAMA_BASE_URL}/api/generate",
+            json={
+                "model": LLM_MODEL,
+                "prompt": prompt,
+                "stream": False
+            },
+            timeout=60
+        )
+        response.raise_for_status()
+        return response.json()["response"].strip()
+    except Exception as e:
+        print(f"Error calling Ollama for chat: {e}")
+        return f"I'm sorry, I encountered an error while trying to process your request. ({str(e)})"
+

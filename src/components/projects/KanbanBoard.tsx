@@ -3,7 +3,7 @@ import { DragDropContext, Droppable, type DropResult } from '@hello-pangea/dnd'
 import { Bug } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { type Bug as BugType, BugCard } from './BugCard'
-import { BugDetailsModal } from './BugDetailsModal'
+import { useNavigate } from 'react-router-dom'
 
 interface KanbanBoardProps {
     projectId: string
@@ -22,7 +22,7 @@ const COLUMNS = [
 export function KanbanBoard({ projectId, refreshTrigger = 0, userRole }: KanbanBoardProps) {
     const [bugs, setBugs] = useState<BugType[]>([])
     const [loading, setLoading] = useState(true)
-    const [selectedBugId, setSelectedBugId] = useState<string | null>(null)
+    const navigate = useNavigate()
 
     useEffect(() => {
         loadBugs()
@@ -142,7 +142,7 @@ export function KanbanBoard({ projectId, refreshTrigger = 0, userRole }: KanbanB
                                                 <BugCard
                                                     bug={bug}
                                                     index={index}
-                                                    onClick={(b) => setSelectedBugId(b.id)}
+                                                    onClick={(b) => navigate(`/projects/${projectId}/bugs/${b.id}`)}
                                                     columnColor={column.color}
                                                 />
                                             </div>
@@ -155,13 +155,6 @@ export function KanbanBoard({ projectId, refreshTrigger = 0, userRole }: KanbanB
                     )
                 })}
             </DragDropContext>
-            <BugDetailsModal
-                bugId={selectedBugId}
-                projectId={projectId}
-                userRole={userRole}
-                onClose={() => setSelectedBugId(null)}
-                onUpdate={loadBugs}
-            />
         </div>
     )
 }
