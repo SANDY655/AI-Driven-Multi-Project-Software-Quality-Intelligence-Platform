@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { ArrowLeft, Clock, AlertCircle, User as UserIcon, FileText, GitCommit } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
+import { ArrowLeft, Clock, AlertCircle, User as UserIcon, FileText, GitCommit, Trash2 } from 'lucide-react'
 import { BugComments } from '@/components/projects/bugs/BugComments'
 import { BugActivityTimeline } from '@/components/projects/bugs/BugActivityTimeline'
 
 export function BugDetailPage() {
     const { id: projectId, bugId } = useParams<{ id: string, bugId: string }>()
     const navigate = useNavigate()
-    
+    const { user } = useAuth()
+
     const [bug, setBug] = useState<any>(null)
     const [project, setProject] = useState<any>(null)
     const [loading, setLoading] = useState(true)
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
 
     useEffect(() => {
         const fetchDetails = async () => {
@@ -44,6 +47,21 @@ export function BugDetailPage() {
             }
 
             setBug(bugData)
+
+            // Fetch current user project role
+            if (user) {
+                const { data: memberData } = await supabase
+                    .from('project_members')
+                    .select('project_role')
+                    .eq('project_id', projectId)
+                    .eq('user_id', user.id)
+                    .maybeSingle()
+
+                if (memberData) {
+                    setCurrentUserRole(memberData.project_role)
+                }
+            }
+
             setLoading(false)
         }
 
@@ -79,6 +97,25 @@ export function BugDetailPage() {
         }
     }
 
+    const canDelete = ['admin', 'pm'].includes(currentUserRole || '')
+
+    const handleDeleteBug = async () => {
+        if (!window.confirm('Are you sure you want to delete this bug? This action cannot be undone.')) return
+
+        try {
+            const { error } = await supabase
+                .from('bugs')
+                .delete()
+                .eq('id', bugId)
+
+            if (error) throw error
+            navigate(`/projects/${projectId}/board`)
+        } catch (error: any) {
+            console.error('Error deleting bug:', error)
+            alert('Failed to delete bug: ' + error.message)
+        }
+    }
+
     return (
         <div className="space-y-6 flex flex-col flex-1 min-h-0 w-full p-8 bg-zinc-50 overflow-y-auto">
             {/* Header */}
@@ -102,11 +139,21 @@ export function BugDetailPage() {
                     <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${getStatusColor(bug.status)}`}>
                         {bug.status.replace('_', ' ')}
                     </div>
+                    {canDelete && (
+                        <button
+                            onClick={handleDeleteBug}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-rose-200 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-semibold transition-colors shadow-sm cursor-pointer"
+                            title="Delete Bug"
+                        >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Delete Bug
+                        </button>
+                    )}
                 </div>
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                
+
                 {/* Main Content (Left Column) */}
                 <div className="xl:col-span-2 space-y-6">
                     {/* Description Card */}

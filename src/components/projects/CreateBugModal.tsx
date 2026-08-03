@@ -49,7 +49,7 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
     const [projectMembers, setProjectMembers] = useState<{ id: string, name: string }[]>([])
     const [aiDuplicates, setAiDuplicates] = useState<any[]>([])
     const [aiRationale, setAiRationale] = useState('')
-    
+
     const { user } = useAuth()
 
     const form = useForm<z.infer<typeof formSchema>>({
@@ -69,13 +69,13 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
             form.reset()
             setAiDuplicates([])
             setAiRationale('')
-            
+
             const fetchMembers = async () => {
                 const { data } = await supabase
                     .from('project_members')
                     .select('user_id, profiles(display_name)')
                     .eq('project_id', projectId)
-                
+
                 if (data) {
                     setProjectMembers(data.map(d => ({
                         id: d.user_id,
@@ -90,10 +90,10 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
     const handleAnalyze = async () => {
         const title = form.getValues('title')
         const description = form.getValues('description')
-        
+
         const isTitleValid = await form.trigger('title')
         const isDescValid = await form.trigger('description')
-        
+
         if (!isTitleValid || !isDescValid) {
             return
         }
@@ -101,7 +101,7 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
         setIsAnalyzing(true)
         try {
             const req = { title, description, project_id: projectId }
-            
+
             const [analysis, assigneeRec, duplicateCheck] = await Promise.all([
                 aiClient.analyzeBug(req).catch(e => { console.error(e); return null; }),
                 aiClient.recommendAssignee(req).catch(e => { console.error(e); return null; }),
@@ -207,15 +207,15 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                         {step === 1 ? 'Report a New Bug' : 'Review & Submit Bug'}
                     </DialogTitle>
                     <DialogDescription className="text-[15px] text-zinc-500">
-                        {step === 1 
-                            ? 'Provide the details of the issue. Our AI will analyze it to suggest priority and severity.' 
+                        {step === 1
+                            ? 'Provide the details of the issue. Our AI will analyze it to suggest priority and severity.'
                             : 'Review the AI suggestions. Modify them if needed before submitting.'}
                     </DialogDescription>
                 </DialogHeader>
 
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-                        
+
                         <div className={step === 1 ? 'block' : 'hidden'}>
                             <div className="space-y-5">
                                 <FormField
@@ -360,7 +360,7 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                                             <FormLabel className="text-sm font-semibold text-zinc-900 flex items-center gap-2">
                                                 Assignee
                                             </FormLabel>
-                                            <Select 
+                                            <Select
                                                 onValueChange={(val) => field.onChange(val === 'none' ? null : val)}
                                                 defaultValue={field.value || "none"}
                                                 value={field.value || "none"}

@@ -103,7 +103,7 @@ export function Dashboard() {
 
             {/* Main Left Content */}
             <div className="flex-1 min-w-0 space-y-8">
-            
+
                 {/* AI Testing Card - MOVED TO TOP FOR VISIBILITY */}
                 <div className="bg-indigo-50 rounded-[24px] p-6 shadow-sm border border-indigo-200 flex flex-col md:flex-row items-center justify-between text-left gap-6">
                     <div className="flex items-center gap-4">
@@ -115,7 +115,7 @@ export function Dashboard() {
                             <p className="text-sm text-indigo-700/80 m-0">Run a mock bug through the local RAG engine to test Priority and Severity prediction.</p>
                         </div>
                     </div>
-                    <button 
+                    <button
                         onClick={testAIEngine}
                         disabled={aiTesting}
                         className="py-3 px-6 bg-[#634AF9] hover:bg-[#523AE0] text-white rounded-xl font-semibold transition-colors disabled:opacity-50 whitespace-nowrap shadow-sm"

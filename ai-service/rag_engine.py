@@ -3,6 +3,24 @@ import json
 import hashlib
 import requests
 from pydantic import BaseModel, Field
+from dotenv import load_dotenv
+from supabase import create_client, Client
+
+# Load environment variables
+load_dotenv(dotenv_path="../.env")
+
+# Initialize Supabase client
+supabase_url = os.environ.get("VITE_SUPABASE_URL")
+supabase_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("VITE_SUPABASE_ANON_KEY")
+
+try:
+    if supabase_url and supabase_key:
+        supabase: Client = create_client(supabase_url, supabase_key)
+    else:
+        supabase = None
+except Exception as e:
+    print(f"Error initializing Supabase in rag_engine: {e}")
+    supabase = None
 
 # Local Llama configuration (using Ollama)
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
@@ -10,6 +28,12 @@ EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "nomic-embed-text")
 LLM_MODEL = os.environ.get("LLM_MODEL", "llama2")
 
 print(f"Using Ollama at {OLLAMA_BASE_URL} with embedding model: {EMBEDDING_MODEL}, LLM model: {LLM_MODEL}")
+
+def clean_ollama_error(e: Exception, action: str) -> str:
+    err_str = str(e)
+    if "ConnectionRefusedError" in err_str or "10061" in err_str or "Max retries exceeded" in err_str or "ConnectionResetError" in err_str:
+        return f"Ollama is not running. Please make sure Ollama is installed and running on port 11434 (using the '{LLM_MODEL}' and '{EMBEDDING_MODEL}' models)."
+    return f"Error during {action}: {err_str}"
 
 # Define schemas for structured output
 class PrioritySeverityPrediction(BaseModel):
@@ -69,22 +93,23 @@ def predict_priority_severity(bug_title: str, bug_description: str, similar_bugs
     if project_details:
         project_context = f"\nProject Context:\nName: {project_details.get('name')}\nDescription: {project_details.get('description')}\nLanguage/Tech: {project_details.get('github_details', {}).get('language', 'Unknown')}\n"
     
-    prompt = f"""You are an expert software QA engineer. Your task is to analyze a new bug report and assign it a priority and severity.
-Use the historical context of similar bugs (if any) and the project details to guide your decision, ensuring consistency with how past bugs were handled.
-{project_context}
-Historical Context (Similar Bugs):
-{context}
+    prompt = f"""Analyze this bug report and classify its priority and severity.
 
-New Bug Report:
-Title: {bug_title}
-Description: {bug_description}
+Bug Title: {bug_title}
+Bug Description: {bug_description}
 
-Respond with a JSON object containing exactly these fields:
-- priority: one of 'P0', 'P1', 'P2', 'P3'
-- severity: one of 'critical', 'high', 'medium', 'low'
-- rationale: brief explanation of why this priority/severity was chosen
+Classification Rules:
+- If the app crashes, fails to load, has data loss, or has security vulnerabilities, classify it as: severity "critical" and priority "P0".
+- If a main feature is broken but the app runs, classify as: severity "high" and priority "P1".
+- If it is a standard bug with a workaround, classify as: severity "medium" and priority "P2".
+- If it is cosmetic/layout/visual only, classify as: severity "low" and priority "P3".
 
-JSON Response:"""
+You must respond with a JSON object containing exactly these keys:
+{{
+  "priority": "P0" or "P1" or "P2" or "P3",
+  "severity": "critical" or "high" or "medium" or "low",
+  "rationale": "a short explanation of why this was chosen"
+}}"""
     
     try:
         response = requests.post(
@@ -122,7 +147,7 @@ JSON Response:"""
         return {
             "priority": "P2",
             "severity": "medium",
-            "rationale": f"Error during analysis: {str(e)}"
+            "rationale": clean_ollama_error(e, "analysis")
         }
 
 def recommend_developer(bug_title: str, bug_description: str, similar_bugs: list, project_details: dict | None = None, project_members: list | None = None) -> dict:
@@ -193,7 +218,7 @@ JSON Response:"""
         print(f"Error calling Ollama: {e}")
         return {
             "recommended_developer_id": "00000000-0000-0000-0000-000000000000",
-            "rationale": f"Error during recommendation: {str(e)}"
+            "rationale": clean_ollama_error(e, "recommendation")
         }
 
 def review_commit(bug_title: str, bug_description: str, commit_message: str, commit_diff: str) -> dict:
@@ -248,7 +273,7 @@ JSON Response:"""
         print(f"Error calling Ollama for code review: {e}")
         return {
             "status": "neutral",
-            "feedback": f"Error during code review generation: {str(e)}"
+            "feedback": clean_ollama_error(e, "code review generation")
         }
 
 def fetch_similar_tasks(query_embedding: list[float], threshold: float = 0.5, count: int = 5, project_id: str | None = None) -> list:
@@ -320,5 +345,5 @@ Answer:"""
         return response.json()["response"].strip()
     except Exception as e:
         print(f"Error calling Ollama for chat: {e}")
-        return f"I'm sorry, I encountered an error while trying to process your request. ({str(e)})"
+        return clean_ollama_error(e, "chat processing")
 

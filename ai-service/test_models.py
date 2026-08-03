@@ -21,7 +21,11 @@ except Exception as e:
 
 print("\nTesting predict_priority_severity...")
 try:
-    result = predict_priority_severity("Test Bug", "This is a test bug description", [])
+    result = predict_priority_severity(
+        "Database connection pool exhaustion under load",
+        "When running stress tests with 100+ concurrent users, the API server crashes and returns HTTP 500 errors. Logs show: ConnectionPoolTimeoutException: Connection pool exhausted. The max pool size is currently set to 10.",
+        []
+    )
     print("Prediction Result:", result)
 except Exception as e:
     print("Error in prediction:", e)
