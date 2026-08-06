@@ -46,6 +46,8 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
     const [submittingComment, setSubmittingComment] = useState(false)
     const [commentError, setCommentError] = useState<string | null>(null)
     const [currentUserRole, setCurrentUserRole] = useState<string | undefined>(initialUserRole)
+    const [projectBugs, setProjectBugs] = useState<any[]>([])
+    const [childDuplicates, setChildDuplicates] = useState<any[]>([])
 
     // Compute permissions
     const canEditAll = ['admin', 'pm', 'tester'].includes(currentUserRole || '')
@@ -110,6 +112,21 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
 
         setComments(commentsData || [])
 
+        // Fetch project bugs for duplicate selection
+        const { data: bugsData } = await supabase
+            .from('bugs')
+            .select('id, title, bug_display_id')
+            .eq('project_id', projectId)
+            .neq('id', bugId)
+        setProjectBugs(bugsData || [])
+
+        // Fetch duplicate child links
+        const { data: dupsData } = await supabase
+            .from('bugs')
+            .select('id, title, bug_display_id')
+            .eq('duplicate_of', bugId)
+        setChildDuplicates(dupsData || [])
+
         // Fetch activity logs
         const { data: activityData } = await supabase
             .from('activity_log')
@@ -150,13 +167,22 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
         if (!bug || !bugId || bug[field] === value) return
 
         const oldValue = bug[field]
+        const updatePayload: Record<string, any> = { [field]: value }
+        if (field === 'duplicate_of' && value) {
+            updatePayload.status = 'closed'
+        }
 
         const { error } = await supabase
             .from('bugs')
-            .update({ [field]: value })
+            .update(updatePayload)
             .eq('id', bugId)
 
         if (!error) {
+            if (field === 'duplicate_of' && value) {
+                const { mergeDuplicateBug } = await import('@/lib/bug-actions')
+                await mergeDuplicateBug(bugId, bug.bug_display_id, value, user?.id || '')
+            }
+
             // Log activity manually if not handled by triggers (since there's no DB trigger for activity yet)
             await supabase
                 .from('activity_log')
@@ -168,7 +194,7 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
                     new_value: value || 'None'
                 })
 
-            setBug({ ...bug, [field]: value })
+            setBug({ ...bug, ...updatePayload })
             onUpdate()
             loadData() // refresh logs
         }
@@ -427,6 +453,42 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
                                             {bug.reporter?.avatar_url && <img src={bug.reporter.avatar_url} className="h-5 w-5 rounded-full" />}
                                             {bug.reporter?.display_name || 'Unknown'}
                                         </div>
+                                    </div>
+
+                                    <div className="pt-4 border-t border-zinc-200 space-y-4">
+                                        <div>
+                                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2 block">Link as Duplicate of</label>
+                                            <Select
+                                                value={bug.duplicate_of || 'none'}
+                                                onValueChange={(val) => updateField('duplicate_of', val === 'none' ? null : val)}
+                                                disabled={!canEditAll}
+                                            >
+                                                <SelectTrigger className="w-full bg-white text-zinc-900 border-zinc-200">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="none" className="italic text-zinc-500">Not a duplicate (keep open)</SelectItem>
+                                                    {projectBugs.map(b => (
+                                                        <SelectItem key={b.id} value={b.id}>
+                                                            {b.bug_display_id} - {b.title}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        {childDuplicates.length > 0 && (
+                                            <div>
+                                                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2 block">Linked Duplicates</label>
+                                                <div className="space-y-1.5">
+                                                    {childDuplicates.map(dup => (
+                                                        <div key={dup.id} className="text-xs font-semibold text-zinc-700 bg-zinc-50 border border-zinc-100 p-2 rounded-lg flex items-center justify-between">
+                                                            <span>{dup.bug_display_id}: {dup.title}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 

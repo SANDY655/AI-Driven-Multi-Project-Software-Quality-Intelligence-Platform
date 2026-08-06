@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -35,16 +35,26 @@ try:
 except Exception:
     supabase = None
 
+def get_supabase_client(authorization: str | None = None) -> Client:
+    if not supabase_url or not supabase_key:
+        return None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        client = create_client(supabase_url, supabase_key)
+        client.postgrest.auth(token)
+        return client
+    return supabase
+
 class BugRequest(BaseModel):
     title: str
     description: str
     project_id: str | None = None
 
-def fetch_similar_bugs(embedding: list[float], threshold: float = 0.8, count: int = 5, project_id: str | None = None):
-    if not supabase:
+def fetch_similar_bugs(db_client: Client, embedding: list[float], threshold: float = 0.8, count: int = 5, project_id: str | None = None):
+    if not db_client:
         raise HTTPException(status_code=500, detail="Supabase client not initialized")
     
-    response = supabase.rpc(
+    response = db_client.rpc(
         "match_bugs", 
         {
             "query_embedding": embedding, 
@@ -56,18 +66,18 @@ def fetch_similar_bugs(embedding: list[float], threshold: float = 0.8, count: in
     
     return response.data
 
-def fetch_project_details(project_id: str | None) -> dict | None:
-    if not supabase or not project_id:
+def fetch_project_details(db_client: Client, project_id: str | None) -> dict | None:
+    if not db_client or not project_id:
         return None
-    response = supabase.table("projects").select("name, description, github_details").eq("id", project_id).execute()
+    response = db_client.table("projects").select("name, description, github_details").eq("id", project_id).execute()
     if response.data and len(response.data) > 0:
         return response.data[0]
     return None
 
-def fetch_project_members(project_id: str | None) -> list:
-    if not supabase or not project_id:
+def fetch_project_members(db_client: Client, project_id: str | None) -> list:
+    if not db_client or not project_id:
         return []
-    response = supabase.table("project_members").select("user_id, project_role, profiles(display_name, skills, current_workload)").eq("project_id", project_id).execute()
+    response = db_client.table("project_members").select("user_id, project_role, profiles(display_name, skills, current_workload)").eq("project_id", project_id).execute()
     return response.data or []
 
 @app.get("/health")
@@ -75,27 +85,46 @@ def health_check():
     return {"status": "healthy"}
 
 @app.post("/api/embed-bug")
-def embed_bug(bug_id: str, request: BugRequest):
+def embed_bug(bug_id: str, request: BugRequest, authorization: str | None = Header(None)):
     """Generates an embedding for a bug and stores it in Supabase (can be called via Webhook)."""
-    text_to_embed = f"Title: {request.title}\nDescription: {request.description}"
-    embedding = get_embedding(text_to_embed)
-    
-    if supabase:
-        supabase.table("bugs").update({"embedding": embedding}).eq("id", bug_id).execute()
+    try:
+        text_to_embed = f"Title: {request.title}\nDescription: {request.description}"
+        embedding = get_embedding(text_to_embed)
         
-    return {"status": "success", "message": "Embedding generated and stored."}
+        # Pad to 1024 dimensions for bugs
+        if len(embedding) < 1024:
+            embedding = embedding + [0.0] * (1024 - len(embedding))
+        
+        db_client = get_supabase_client(authorization)
+        if db_client:
+            res = db_client.table("bugs").update({"embedding": embedding}).eq("id", bug_id).execute()
+            print(f"Embedding updated for bug {bug_id}. Response: {res.data}")
+            
+        return {"status": "success", "message": "Embedding generated and stored."}
+    except Exception as e:
+        import traceback
+        trace = traceback.format_exc()
+        print("Error embedding bug:")
+        print(trace)
+        raise HTTPException(status_code=500, detail=f"Failed to generate or save bug embedding: {e}\n{trace}")
 
 @app.post("/api/analyze-bug")
-def analyze_bug(request: BugRequest):
+def analyze_bug(request: BugRequest, authorization: str | None = Header(None)):
     """Predicts Priority and Severity for a new bug using RAG."""
     text_to_embed = f"Title: {request.title}\nDescription: {request.description}"
     embedding = get_embedding(text_to_embed)
     
+    # Pad to 1024 dimensions for bugs
+    if len(embedding) < 1024:
+        embedding = embedding + [0.0] * (1024 - len(embedding))
+    
+    db_client = get_supabase_client(authorization)
+    
     # 1. Retrieve similar bugs scoped to this project
-    similar_bugs = fetch_similar_bugs(embedding, threshold=0.7, count=5, project_id=request.project_id)
+    similar_bugs = fetch_similar_bugs(db_client, embedding, threshold=0.7, count=5, project_id=request.project_id)
     
     # 2. Fetch project context
-    project_details = fetch_project_details(request.project_id)
+    project_details = fetch_project_details(db_client, request.project_id)
     
     # 3. Augment and Generate
     prediction = predict_priority_severity(request.title, request.description, similar_bugs, project_details)
@@ -106,30 +135,42 @@ def analyze_bug(request: BugRequest):
     }
 
 @app.post("/api/detect-duplicates")
-def detect_duplicates(request: BugRequest):
+def detect_duplicates(request: BugRequest, authorization: str | None = Header(None)):
     """Returns potential duplicate bugs based on vector similarity."""
     text_to_embed = f"Title: {request.title}\nDescription: {request.description}"
     embedding = get_embedding(text_to_embed)
     
+    # Pad to 1024 dimensions for bugs
+    if len(embedding) < 1024:
+        embedding = embedding + [0.0] * (1024 - len(embedding))
+        
+    db_client = get_supabase_client(authorization)
+    
     # High threshold for duplicates, scoped to the project
-    similar_bugs = fetch_similar_bugs(embedding, threshold=0.85, count=3, project_id=request.project_id)
+    similar_bugs = fetch_similar_bugs(db_client, embedding, threshold=0.85, count=3, project_id=request.project_id)
     
     return {
         "duplicates": similar_bugs
     }
 
 @app.post("/api/recommend-assignee")
-def get_recommended_assignee(request: BugRequest):
+def get_recommended_assignee(request: BugRequest, authorization: str | None = Header(None)):
     """Recommends a developer based on historical bug fixes."""
     text_to_embed = f"Title: {request.title}\nDescription: {request.description}"
     embedding = get_embedding(text_to_embed)
     
-    similar_bugs = fetch_similar_bugs(embedding, threshold=0.7, count=5, project_id=request.project_id)
+    # Pad to 1024 dimensions for bugs
+    if len(embedding) < 1024:
+        embedding = embedding + [0.0] * (1024 - len(embedding))
+        
+    db_client = get_supabase_client(authorization)
     
-    project_details = fetch_project_details(request.project_id)
-    project_members = fetch_project_members(request.project_id)
+    similar_bugs = fetch_similar_bugs(db_client, embedding, threshold=0.7, count=5, project_id=request.project_id)
     
-    recommendation = recommend_developer(request.title, request.description, similar_bugs, project_details, project_members)
+    project_details = fetch_project_details(db_client, request.project_id)
+    project_members = fetch_project_members(db_client, request.project_id)
+    
+    recommendation = recommend_developer(request.title, request.description, similar_bugs, project_details, project_members, db_client=db_client)
     
     return {
         "recommendation": recommendation,
@@ -142,12 +183,21 @@ class TaskEmbedRequest(BaseModel):
     description: str
 
 @app.post("/api/embed-task")
-def embed_task(request: TaskEmbedRequest):
+def embed_task(request: TaskEmbedRequest, authorization: str | None = Header(None)):
     """Generates an embedding for a task and stores it in the database."""
     context_text = f"Title: {request.title}\nDescription: {request.description}"
     try:
         embedding = get_embedding(context_text)
-        supabase.table("tasks").update({"embedding": embedding}).eq("id", request.task_id).execute()
+        
+        # Enforce 768 dimensions for tasks
+        if len(embedding) > 768:
+            embedding = embedding[:768]
+        elif len(embedding) < 768:
+            embedding = embedding + [0.0] * (768 - len(embedding))
+            
+        db_client = get_supabase_client(authorization)
+        if db_client:
+            db_client.table("tasks").update({"embedding": embedding}).eq("id", request.task_id).execute()
         return {"status": "success"}
     except Exception as e:
         import traceback
@@ -160,15 +210,23 @@ class ChatRequest(BaseModel):
     project_id: str | None = None
 
 @app.post("/api/chat")
-def chat(request: ChatRequest):
+def chat(request: ChatRequest, authorization: str | None = Header(None)):
     """Answers a user's question using semantic search over project bugs and tasks."""
     embedding = get_embedding(request.query)
     
-    # Retrieve top 5 most relevant bugs and tasks
-    similar_bugs = fetch_similar_bugs(embedding, threshold=0.5, count=5, project_id=request.project_id)
-    similar_tasks = fetch_similar_tasks(embedding, threshold=0.5, count=5, project_id=request.project_id)
+    # 1024-dimension query for bugs
+    bug_embedding = embedding + [0.0] * (1024 - len(embedding)) if len(embedding) < 1024 else embedding[:1024]
     
-    project_details = fetch_project_details(request.project_id)
+    # 768-dimension query for tasks
+    task_embedding = embedding[:768] if len(embedding) >= 768 else embedding + [0.0] * (768 - len(embedding))
+    
+    db_client = get_supabase_client(authorization)
+    
+    # Retrieve top 5 most relevant bugs and tasks
+    similar_bugs = fetch_similar_bugs(db_client, bug_embedding, threshold=0.5, count=5, project_id=request.project_id)
+    similar_tasks = fetch_similar_tasks(db_client, task_embedding, threshold=0.5, count=5, project_id=request.project_id)
+    
+    project_details = fetch_project_details(db_client, request.project_id)
     
     response_text = generate_chat_response(request.query, similar_bugs, similar_tasks, project_details)
     
@@ -225,7 +283,33 @@ def github_webhook(payload: GitHubWebhookPayload):
         commit_sha = commit.get("id", "simulated-sha-" + str(hash(message))[-6:])
         commit_url = commit.get("url", f"https://github.com/simulated/commit/{commit_sha}")
         author_name = commit.get("author", {}).get("name", "Unknown Developer")
+        author_email = commit.get("author", {}).get("email")
+        author_username = commit.get("author", {}).get("username")
         
+        # Resolve user profile ID from commit author
+        user_id = None
+        if author_email:
+            try:
+                profile_res = supabase.table("profiles").select("id").eq("email", author_email).execute()
+                if profile_res.data:
+                    user_id = profile_res.data[0]["id"]
+            except Exception:
+                pass
+        if not user_id and author_name:
+            try:
+                profile_res = supabase.table("profiles").select("id").eq("display_name", author_name).execute()
+                if profile_res.data:
+                    user_id = profile_res.data[0]["id"]
+            except Exception:
+                pass
+        if not user_id and author_username:
+            try:
+                profile_res = supabase.table("profiles").select("id").eq("github_username", author_username).execute()
+                if profile_res.data:
+                    user_id = profile_res.data[0]["id"]
+            except Exception:
+                pass
+
         # 2. Insert into commits 
         try:
             commit_res = supabase.table("commits").insert({
@@ -233,6 +317,7 @@ def github_webhook(payload: GitHubWebhookPayload):
                 "sha": commit_sha,
                 "message": message,
                 "author_name": author_name,
+                "github_username": author_username,
                 "url": commit_url,
                 "committed_at": datetime.now(timezone.utc).isoformat()
             }).execute()
@@ -277,12 +362,15 @@ def github_webhook(payload: GitHubWebhookPayload):
             }).eq("id", ticket_id).execute()
             
             # Add activity log for status change
-            supabase.table("task_activity_log" if is_task else "activity_log").insert({
+            status_activity = {
                 foreign_key: ticket_id,
                 "action": "status_changed",
                 "old_value": ticket["status"],
                 "new_value": new_status
-            }).execute()
+            }
+            if user_id:
+                status_activity["user_id"] = user_id
+            supabase.table("task_activity_log" if is_task else "activity_log").insert(status_activity).execute()
 
         # 5. Run AI Code Review
         diff = payload.simulated_diff
@@ -308,11 +396,14 @@ def github_webhook(payload: GitHubWebhookPayload):
             
         # 7. Add activity log for link
         try:
-            supabase.table("task_activity_log" if is_task else "activity_log").insert({
+            link_activity = {
                 foreign_key: ticket_id,
                 "action": "commit_linked",
                 "new_value": commit_sha[:7]
-            }).execute()
+            }
+            if user_id:
+                link_activity["user_id"] = user_id
+            supabase.table("task_activity_log" if is_task else "activity_log").insert(link_activity).execute()
         except Exception:
             pass
             

@@ -15,6 +15,7 @@ export function BugDetailPage() {
     const [project, setProject] = useState<any>(null)
     const [loading, setLoading] = useState(true)
     const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+    const [childDuplicates, setChildDuplicates] = useState<any[]>([])
 
     useEffect(() => {
         const fetchDetails = async () => {
@@ -28,14 +29,14 @@ export function BugDetailPage() {
                 .single()
             if (projectData) setProject(projectData)
 
-            // Fetch Bug details
             const { data: bugData, error } = await supabase
                 .from('bugs')
                 .select(`
                     *,
                     reported_by_profile:reported_by (display_name, avatar_url),
                     assigned_to_profile:assigned_to (display_name, avatar_url),
-                    commit_bug_links (commits (sha, message, url, author_name))
+                    commit_bug_links (commits (sha, message, url, author_name)),
+                    duplicate_of_bug:duplicate_of (bug_display_id, title)
                 `)
                 .eq('id', bugId)
                 .single()
@@ -47,6 +48,13 @@ export function BugDetailPage() {
             }
 
             setBug(bugData)
+
+            // Fetch child duplicates
+            const { data: childDups } = await supabase
+                .from('bugs')
+                .select('bug_display_id, title')
+                .eq('duplicate_of', bugId)
+            setChildDuplicates(childDups || [])
 
             // Fetch current user project role
             if (user) {
@@ -247,6 +255,34 @@ export function BugDetailPage() {
                                     <span className="font-semibold text-zinc-800">{new Date(bug.updated_at).toLocaleDateString()}</span>
                                 </div>
                             </div>
+
+                            {(bug.duplicate_of_bug || childDuplicates.length > 0) && (
+                                <>
+                                    <div className="w-full h-px bg-zinc-100 my-4"></div>
+                                    <div className="space-y-4">
+                                        {bug.duplicate_of_bug && (
+                                            <div>
+                                                <span className="text-xs text-zinc-500 block mb-1">Duplicate of</span>
+                                                <div className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-100 p-2.5 rounded-xl">
+                                                    {bug.duplicate_of_bug.bug_display_id}: {bug.duplicate_of_bug.title}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {childDuplicates.length > 0 && (
+                                            <div>
+                                                <span className="text-xs text-zinc-500 block mb-1">Linked Duplicates</span>
+                                                <div className="space-y-2">
+                                                    {childDuplicates.map((dup, idx) => (
+                                                        <div key={idx} className="text-xs font-medium text-zinc-700 bg-zinc-50 border border-zinc-100 p-2.5 rounded-xl">
+                                                            {dup.bug_display_id}: {dup.title}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            )}
                         </div>
 
                         {bug.commit_bug_links && bug.commit_bug_links.length > 0 && (

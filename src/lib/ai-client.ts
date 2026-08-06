@@ -1,6 +1,14 @@
-// Utility to call the local Python FastAPI AI Service
+import { supabase } from './supabase';
 
 const AI_SERVICE_URL = 'http://localhost:8000';
+
+async function getHeaders(): Promise<HeadersInit> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return {
+    'Content-Type': 'application/json',
+    ...(session ? { 'Authorization': `Bearer ${session.access_token}` } : {})
+  };
+}
 
 export interface BugAnalysisRequest {
   title: string;
@@ -38,9 +46,7 @@ export const aiClient = {
   async analyzeBug(request: BugAnalysisRequest): Promise<AnalysisResponse> {
     const response = await fetch(`${AI_SERVICE_URL}/api/analyze-bug`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await getHeaders(),
       body: JSON.stringify({
         title: request.title,
         description: request.description,
@@ -61,10 +67,27 @@ export const aiClient = {
   async embedBug(bugId: string, request: BugAnalysisRequest): Promise<void> {
     const response = await fetch(`${AI_SERVICE_URL}/api/embed-bug?bug_id=${bugId}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await getHeaders(),
       body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      throw new Error(`AI Service Error: ${response.statusText}`);
+    }
+  },
+
+  /**
+   * Embeds a task directly.
+   */
+  async embedTask(taskId: string, request: { title: string; description: string }): Promise<void> {
+    const response = await fetch(`${AI_SERVICE_URL}/api/embed-task`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify({
+        task_id: taskId,
+        title: request.title,
+        description: request.description
+      }),
     });
 
     if (!response.ok) {
@@ -78,7 +101,7 @@ export const aiClient = {
   async detectDuplicates(request: BugAnalysisRequest): Promise<DuplicateResponse> {
     const response = await fetch(`${AI_SERVICE_URL}/api/detect-duplicates`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await getHeaders(),
       body: JSON.stringify({
         title: request.title,
         description: request.description,
@@ -95,7 +118,7 @@ export const aiClient = {
   async recommendAssignee(request: BugAnalysisRequest): Promise<RecommendationResponse> {
     const response = await fetch(`${AI_SERVICE_URL}/api/recommend-assignee`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await getHeaders(),
       body: JSON.stringify({
         title: request.title,
         description: request.description,

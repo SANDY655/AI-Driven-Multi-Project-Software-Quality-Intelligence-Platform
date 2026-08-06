@@ -2,6 +2,8 @@ import os
 import json
 import hashlib
 import requests
+import re
+import subprocess
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -150,8 +152,90 @@ You must respond with a JSON object containing exactly these keys:
             "rationale": clean_ollama_error(e, "analysis")
         }
 
-def recommend_developer(bug_title: str, bug_description: str, similar_bugs: list, project_details: dict | None = None, project_members: list | None = None) -> dict:
-    """Uses local Llama model to recommend an assignee based on who fixed similar bugs and project context."""
+def get_git_blame_info(title: str, description: str, db_client: Client | None) -> dict | None:
+    """Scans bug title and description for file path patterns, executes git blame, 
+    and resolves the author profile if possible."""
+    if not db_client:
+        return None
+
+    # Matches paths like src/middleware/auth.ts or src/middleware/auth.ts:15
+    # Restricts to common extensions: py, ts, tsx, js, jsx, json, html, css, sql, go, java, cpp, h, c, cs, rb, php, sh, txt, md, yaml, yml, xml
+    pattern = r'\b([a-zA-Z0-9_\-\/]+\.(?:py|ts|tsx|js|jsx|json|html|css|sql|go|java|cpp|h|c|cs|rb|php|sh|txt|md|yaml|yml|xml))(?::(\d+))?\b'
+    
+    matches = re.findall(pattern, f"{title}\n{description}")
+    if not matches:
+        return None
+
+    # Try matching file paths
+    for file_path, line_number in matches:
+        # Resolve full path relative to repo root
+        # Since the backend runs in ai-service/ folder, the repo root is ..
+        full_path = os.path.join("..", file_path)
+        if not os.path.exists(full_path):
+            # Check if it matches a file basename in the codebase (e.g. if bug report says auth.ts instead of src/middleware/auth.ts)
+            found = False
+            for root, dirs, files in os.walk(".."):
+                # Skip .git, node_modules, etc.
+                if ".git" in root or "node_modules" in root or ".venv" in root or "__pycache__" in root:
+                    continue
+                if os.path.basename(file_path) in files:
+                    full_path = os.path.join(root, os.path.basename(file_path))
+                    file_path = os.path.relpath(full_path, "..").replace("\\", "/")
+                    found = True
+                    break
+            if not found:
+                continue
+
+        # Run git blame on this file
+        try:
+            if line_number:
+                line_num = int(line_number)
+                cmd = ["git", "blame", "-e", "-L", f"{line_num},{line_num}", "--", file_path]
+            else:
+                cmd = ["git", "blame", "-e", "--", file_path]
+
+            result = subprocess.run(
+                cmd,
+                cwd="..",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True
+            )
+            
+            blame_output = result.stdout
+            
+            # Extract emails (formatted as <email@domain.com>)
+            emails = re.findall(r'<([^>]+)>', blame_output)
+            if not emails:
+                continue
+                
+            # If a specific line is blamed, pick the email on that line
+            if line_number:
+                author_email = emails[0]
+            else:
+                # If the entire file is blamed, pick the most frequent committer email
+                from collections import Counter
+                author_email = Counter(emails).most_common(1)[0][0]
+                
+            # Query profiles table for this email
+            profile_res = db_client.table("profiles").select("id, display_name").eq("email", author_email).execute()
+            if profile_res.data:
+                profile = profile_res.data[0]
+                return {
+                    "developer_id": profile["id"],
+                    "developer_name": profile["display_name"],
+                    "file_path": file_path,
+                    "line_number": line_number or None,
+                    "email": author_email
+                }
+        except Exception as e:
+            print(f"Error running git blame on {file_path}: {e}")
+            
+    return None
+
+def recommend_developer(bug_title: str, bug_description: str, similar_bugs: list, project_details: dict | None = None, project_members: list | None = None, db_client: Client | None = None) -> dict:
+    """Uses local Llama model to recommend an assignee based on who fixed similar bugs, project context, skills, workloads, and git blame ownership."""
     context = format_bug_context(similar_bugs)
     
     project_context = ""
@@ -165,12 +249,24 @@ def recommend_developer(bug_title: str, bug_description: str, similar_bugs: list
             user_id = member.get("user_id")
             profiles = member.get("profiles", {})
             name = profiles.get("display_name", "Unknown") if profiles else "Unknown"
-            members_context += f"- Name: {name}, ID: {user_id}\n"
-    
-    prompt = f"""You are a technical project manager. Your task is to assign a new bug to the most appropriate developer.
-Look at the historical context of similar bugs and see which developer (by UUID) resolved them.
-If a particular developer consistently handles this type of issue, recommend them. Also consider the Available Developers list.
-{project_context}{members_context}
+            skills = profiles.get("skills", []) if profiles else []
+            workload = profiles.get("current_workload", 0) if profiles else 0
+            members_context += f"- Name: {name}, ID: {user_id}, Skills: {skills}, Current Workload: {workload} active tickets\n"
+            
+    # Check for git blame information
+    blame_info = get_git_blame_info(bug_title, bug_description, db_client or supabase)
+    blame_context = ""
+    if blame_info:
+        line_str = f"line {blame_info['line_number']}" if blame_info['line_number'] else "most changes"
+        blame_context = f"\nGit Blame Insights:\n- File referenced in bug: '{blame_info['file_path']}' ({line_str})\n- Code Author: '{blame_info['developer_name']}' (ID: {blame_info['developer_id']})\n(Note: This developer is the author/owner of the code causing the bug, making them a very strong candidate to fix it.)\n"
+
+    prompt = f"""You are a technical project manager. Your task is to assign a new bug to the most appropriate developer from the Available Developers list.
+
+Rules for Recommendation:
+1. Prioritize code ownership (Git Blame Insights). If a developer is identified as the author of the code containing the bug, they are typically the best fit.
+2. Consider skills fit: Match keywords in the bug report to developer skills.
+3. Balance workload: Avoid recommending developers who have a high active workload (e.g. 5+ active tickets) unless they are the clear expert or author.
+{project_context}{members_context}{blame_context}
 Historical Context (Similar Bugs):
 {context}
 
@@ -179,8 +275,8 @@ Title: {bug_title}
 Description: {bug_description}
 
 Respond with a JSON object containing exactly these fields:
-- recommended_developer_id: the UUID of the best developer for the job (pick one from the historical bugs or generate a placeholder UUID)
-- rationale: brief explanation of why this developer is recommended
+- recommended_developer_id: the UUID of the best developer for the job (MUST be one from the Available Developers list, or '00000000-0000-0000-0000-000000000000' if no developer fits)
+- rationale: brief explanation of why this developer is recommended (mentioning skills matching, workload balancing, or git blame ownership where applicable)
 
 JSON Response:"""
     
@@ -212,7 +308,7 @@ JSON Response:"""
             # Fallback response
             return {
                 "recommended_developer_id": "00000000-0000-0000-0000-000000000000",
-                "rationale": "No developer recommendation could be made"
+                "rationale": "No developer recommendation could be made due to JSON parsing error"
             }
     except Exception as e:
         print(f"Error calling Ollama: {e}")

@@ -33,6 +33,7 @@ const formSchema = z.object({
     severity: z.enum(['critical', 'high', 'medium', 'low']),
     priority: z.enum(['P0', 'P1', 'P2', 'P3']),
     assigned_to: z.string().optional().nullable(),
+    duplicate_of: z.string().optional().nullable(),
 })
 
 interface CreateBugModalProps {
@@ -49,6 +50,7 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
     const [projectMembers, setProjectMembers] = useState<{ id: string, name: string }[]>([])
     const [aiDuplicates, setAiDuplicates] = useState<any[]>([])
     const [aiRationale, setAiRationale] = useState('')
+    const [aiAssigneeRationale, setAiAssigneeRationale] = useState('')
 
     const { user } = useAuth()
 
@@ -59,16 +61,25 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
             description: '',
             severity: 'medium',
             priority: 'P2',
-            assigned_to: null
+            assigned_to: null,
+            duplicate_of: null
         },
     })
 
     useEffect(() => {
         if (open) {
             setStep(1)
-            form.reset()
+            form.reset({
+                title: '',
+                description: '',
+                severity: 'medium',
+                priority: 'P2',
+                assigned_to: null,
+                duplicate_of: null
+            })
             setAiDuplicates([])
             setAiRationale('')
+            setAiAssigneeRationale('')
 
             const fetchMembers = async () => {
                 const { data } = await supabase
@@ -119,6 +130,9 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                 if (recId !== '00000000-0000-0000-0000-000000000000') {
                     form.setValue('assigned_to', recId)
                 }
+                if (assigneeRec.recommendation.rationale) {
+                    setAiAssigneeRationale(assigneeRec.recommendation.rationale)
+                }
             }
 
             if (duplicateCheck?.duplicates && duplicateCheck.duplicates.length > 0) {
@@ -167,14 +181,23 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                     reported_by: user.id,
                     assigned_to: values.assigned_to || null,
                     ai_predicted_severity: values.severity,
-                    ai_suggested_assignee: values.assigned_to || null
+                    ai_suggested_assignee: values.assigned_to || null,
+                    duplicate_of: values.duplicate_of || null,
+                    status: values.duplicate_of ? 'closed' : 'open'
                 })
                 .select()
                 .single()
 
             if (insertError) throw insertError
 
-            // 3. Trigger Embedding
+            // 3. Trigger duplicate activity sync
+            if (newBug && values.duplicate_of) {
+                const { mergeDuplicateBug } = await import('@/lib/bug-actions')
+                mergeDuplicateBug(newBug.id, bugDisplayId, values.duplicate_of, user.id)
+                    .catch(e => console.error("Failed to merge duplicate activity", e))
+            }
+
+            // 4. Trigger Embedding
             if (newBug) {
                 aiClient.embedBug(newBug.id, {
                     title: values.title,
@@ -277,112 +300,157 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                         </div>
 
                         <div className={step === 2 ? 'block' : 'hidden'}>
-                            {aiDuplicates.length > 0 && (
-                                <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 space-y-2">
-                                    <div className="flex items-center gap-2 font-semibold">
-                                        <AlertTriangle className="h-4 w-4 text-amber-600" />
-                                        Potential Duplicates Detected
+                            <div className="max-h-[320px] overflow-y-auto pr-2 space-y-4 mb-4">
+                                {aiDuplicates.length > 0 && (
+                                    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 space-y-1">
+                                        <div className="flex items-center gap-2 font-semibold text-sm">
+                                            <AlertTriangle className="h-4 w-4 text-amber-600" />
+                                            Potential Duplicates Detected
+                                        </div>
+                                        <ul className="text-xs space-y-1 list-disc pl-5">
+                                            {aiDuplicates.map((dup: any, i: number) => (
+                                                <li key={i} className="text-amber-800">
+                                                    <span className="font-medium">{dup.title}</span> ({dup.priority}, {dup.severity})
+                                                </li>
+                                            ))}
+                                        </ul>
                                     </div>
-                                    <ul className="text-sm space-y-1 list-disc pl-6">
-                                        {aiDuplicates.map((dup: any, i: number) => (
-                                            <li key={i} className="text-amber-800">
-                                                <span className="font-medium">{dup.title}</span> ({dup.priority}, {dup.severity})
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
+                                )}
 
-                            {aiRationale && (
-                                <div className="mb-6 p-4 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-900 text-sm flex gap-3">
-                                    <Sparkles className="h-5 w-5 text-indigo-500 shrink-0 mt-0.5" />
-                                    <div>
-                                        <p className="font-semibold mb-1 text-indigo-900">AI Analysis</p>
-                                        <p className="text-indigo-800 leading-relaxed">{aiRationale}</p>
+                                {aiRationale && (
+                                    <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-900 text-[13px] flex gap-2.5">
+                                        <Sparkles className="h-4 w-4 text-indigo-500 shrink-0 mt-0.5" />
+                                        <div>
+                                            <p className="font-semibold mb-0.5 text-indigo-900 text-sm">AI Analysis</p>
+                                            <p className="text-indigo-800 leading-relaxed">{aiRationale}</p>
+                                        </div>
                                     </div>
+                                )}
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <FormField
+                                        control={form.control}
+                                        name="severity"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-xs font-semibold text-zinc-900">Severity</FormLabel>
+                                                <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                                                    <FormControl>
+                                                        <SelectTrigger className="rounded-xl border-zinc-200 focus:ring-zinc-900 h-10 text-sm">
+                                                            <SelectValue placeholder="Select severity" />
+                                                        </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent className="rounded-xl border-zinc-100 shadow-lg">
+                                                        <SelectItem value="critical" className="rounded-lg">Critical</SelectItem>
+                                                        <SelectItem value="high" className="rounded-lg">High</SelectItem>
+                                                        <SelectItem value="medium" className="rounded-lg">Medium</SelectItem>
+                                                        <SelectItem value="low" className="rounded-lg">Low</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name="priority"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-xs font-semibold text-zinc-900">Priority</FormLabel>
+                                                <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                                                    <FormControl>
+                                                        <SelectTrigger className="rounded-xl border-zinc-200 focus:ring-zinc-900 h-10 text-sm">
+                                                            <SelectValue placeholder="Select priority" />
+                                                        </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent className="rounded-xl border-zinc-100 shadow-lg">
+                                                        <SelectItem value="P0" className="rounded-lg">P0 - Blocker</SelectItem>
+                                                        <SelectItem value="P1" className="rounded-lg">P1 - High</SelectItem>
+                                                        <SelectItem value="P2" className="rounded-lg">P2 - Medium</SelectItem>
+                                                        <SelectItem value="P3" className="rounded-lg">P3 - Low</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                     <FormField
+                                        control={form.control}
+                                        name="assigned_to"
+                                        render={({ field }) => (
+                                            <FormItem className="col-span-2">
+                                                <FormLabel className="text-xs font-semibold text-zinc-900 flex items-center gap-2">
+                                                    Assignee
+                                                </FormLabel>
+                                                <Select
+                                                    onValueChange={(val) => field.onChange(val === 'none' ? null : val)}
+                                                    defaultValue={field.value || "none"}
+                                                    value={field.value || "none"}
+                                                >
+                                                    <FormControl>
+                                                        <SelectTrigger className="rounded-xl border-zinc-200 focus:ring-zinc-900 h-10 text-sm">
+                                                            <SelectValue placeholder="Select a developer (optional)" />
+                                                        </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent className="rounded-xl border-zinc-100 shadow-lg">
+                                                        <SelectItem value="none" className="rounded-lg italic text-zinc-500">Unassigned</SelectItem>
+                                                        {projectMembers.map(member => (
+                                                            <SelectItem key={member.id} value={member.id} className="rounded-lg">
+                                                                {member.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <FormMessage />
+                                                {aiAssigneeRationale && (
+                                                    <div className="mt-2.5 p-3 rounded-xl bg-emerald-50/50 border border-emerald-100 text-emerald-900 text-xs flex gap-2 font-sans">
+                                                        <Sparkles className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                                                        <div>
+                                                            <p className="font-semibold text-emerald-950 mb-0.5">AI Suggestion Rationale</p>
+                                                            <p className="text-emerald-800 leading-normal">{aiAssigneeRationale}</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    {aiDuplicates.length > 0 && (
+                                        <FormField
+                                            control={form.control}
+                                            name="duplicate_of"
+                                            render={({ field }) => (
+                                                <FormItem className="col-span-2">
+                                                    <FormLabel className="text-xs font-semibold text-zinc-900 flex items-center gap-2">
+                                                        Link as Duplicate of
+                                                    </FormLabel>
+                                                    <Select
+                                                        onValueChange={(val) => field.onChange(val === 'none' ? null : val)}
+                                                        defaultValue={field.value || "none"}
+                                                        value={field.value || "none"}
+                                                    >
+                                                        <FormControl>
+                                                            <SelectTrigger className="rounded-xl border-zinc-200 focus:ring-zinc-900 h-10 text-sm">
+                                                                <SelectValue placeholder="Not a duplicate (keep open)" />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent className="rounded-xl border-zinc-100 shadow-lg">
+                                                            <SelectItem value="none" className="rounded-lg italic text-zinc-500">Not a duplicate (keep open)</SelectItem>
+                                                            {aiDuplicates.map(dup => (
+                                                                <SelectItem key={dup.id} value={dup.id} className="rounded-lg">
+                                                                    {dup.bug_display_id || 'Bug'} - {dup.title}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    )}
                                 </div>
-                            )}
-
-                            <div className="grid grid-cols-2 gap-6">
-                                <FormField
-                                    control={form.control}
-                                    name="severity"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel className="text-sm font-semibold text-zinc-900">Severity</FormLabel>
-                                            <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
-                                                <FormControl>
-                                                    <SelectTrigger className="rounded-xl border-zinc-200 focus:ring-zinc-900 h-11 text-base">
-                                                        <SelectValue placeholder="Select severity" />
-                                                    </SelectTrigger>
-                                                </FormControl>
-                                                <SelectContent className="rounded-xl border-zinc-100 shadow-lg">
-                                                    <SelectItem value="low" className="rounded-lg">Low</SelectItem>
-                                                    <SelectItem value="medium" className="rounded-lg">Medium</SelectItem>
-                                                    <SelectItem value="high" className="rounded-lg">High</SelectItem>
-                                                    <SelectItem value="critical" className="rounded-lg">Critical</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-
-                                <FormField
-                                    control={form.control}
-                                    name="priority"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel className="text-sm font-semibold text-zinc-900">Priority</FormLabel>
-                                            <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
-                                                <FormControl>
-                                                    <SelectTrigger className="rounded-xl border-zinc-200 focus:ring-zinc-900 h-11 text-base">
-                                                        <SelectValue placeholder="Select priority" />
-                                                    </SelectTrigger>
-                                                </FormControl>
-                                                <SelectContent className="rounded-xl border-zinc-100 shadow-lg">
-                                                    <SelectItem value="P3" className="rounded-lg">P3 - Low</SelectItem>
-                                                    <SelectItem value="P2" className="rounded-lg">P2 - Medium</SelectItem>
-                                                    <SelectItem value="P1" className="rounded-lg">P1 - High</SelectItem>
-                                                    <SelectItem value="P0" className="rounded-lg">P0 - Critical</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-
-                                <FormField
-                                    control={form.control}
-                                    name="assigned_to"
-                                    render={({ field }) => (
-                                        <FormItem className="col-span-2">
-                                            <FormLabel className="text-sm font-semibold text-zinc-900 flex items-center gap-2">
-                                                Assignee
-                                            </FormLabel>
-                                            <Select
-                                                onValueChange={(val) => field.onChange(val === 'none' ? null : val)}
-                                                defaultValue={field.value || "none"}
-                                                value={field.value || "none"}
-                                            >
-                                                <FormControl>
-                                                    <SelectTrigger className="rounded-xl border-zinc-200 focus:ring-zinc-900 h-11 text-base">
-                                                        <SelectValue placeholder="Select a developer (optional)" />
-                                                    </SelectTrigger>
-                                                </FormControl>
-                                                <SelectContent className="rounded-xl border-zinc-100 shadow-lg">
-                                                    <SelectItem value="none" className="rounded-lg italic text-zinc-500">Unassigned</SelectItem>
-                                                    {projectMembers.map(member => (
-                                                        <SelectItem key={member.id} value={member.id} className="rounded-lg">
-                                                            {member.name}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
                             </div>
 
                             <div className="pt-4 flex justify-between items-center border-t border-zinc-100 mt-6">

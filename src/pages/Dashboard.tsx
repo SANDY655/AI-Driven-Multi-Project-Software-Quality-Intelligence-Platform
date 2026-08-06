@@ -35,6 +35,7 @@ export function Dashboard() {
     const [projects, setProjects] = useState<Project[]>([])
     const [loading, setLoading] = useState(true)
     const [aiTesting, setAiTesting] = useState(false)
+    const [isBackfilling, setIsBackfilling] = useState(false)
 
     const loadData = useCallback(async () => {
         if (!user) return
@@ -98,6 +99,45 @@ export function Dashboard() {
         }
     }
 
+    const handleBackfill = async () => {
+        setIsBackfilling(true);
+        try {
+            const { data: bugs, error: bugsErr } = await supabase.from('bugs').select('id, title, description, project_id');
+            if (bugsErr) throw bugsErr;
+            
+            const { data: tasks, error: tasksErr } = await supabase.from('tasks').select('id, title, description, project_id');
+            if (tasksErr) throw tasksErr;
+
+            let bugCount = 0;
+            let taskCount = 0;
+
+            for (const bug of bugs || []) {
+                await aiClient.embedBug(bug.id, {
+                    title: bug.title,
+                    description: bug.description || '',
+                    project_id: bug.project_id
+                });
+                bugCount++;
+            }
+
+            for (const task of tasks || []) {
+                await aiClient.embedTask(task.id, {
+                    title: task.title,
+                    description: task.description || ''
+                });
+                taskCount++;
+            }
+
+            alert(`AI Embeddings Backfill Complete!\nSuccessfully embedded ${bugCount} bugs and ${taskCount} tasks.`);
+        } catch (error) {
+            console.error("Backfill failed:", error);
+            alert("Backfill failed. Please ensure the Python FastAPI server is running on port 8000!");
+        } finally {
+            setIsBackfilling(false);
+        }
+    }
+
+
     return (
         <div className="flex flex-col xl:flex-row gap-8 min-h-full font-sans pb-8 -mt-2">
 
@@ -115,13 +155,22 @@ export function Dashboard() {
                             <p className="text-sm text-indigo-700/80 m-0">Run a mock bug through the local RAG engine to test Priority and Severity prediction.</p>
                         </div>
                     </div>
-                    <button
-                        onClick={testAIEngine}
-                        disabled={aiTesting}
-                        className="py-3 px-6 bg-[#634AF9] hover:bg-[#523AE0] text-white rounded-xl font-semibold transition-colors disabled:opacity-50 whitespace-nowrap shadow-sm"
-                    >
-                        {aiTesting ? 'Analyzing...' : 'Run Test Analysis'}
-                    </button>
+                    <div className="flex flex-wrap gap-3">
+                        <button 
+                            onClick={testAIEngine}
+                            disabled={aiTesting || isBackfilling}
+                            className="py-3 px-6 bg-[#634AF9] hover:bg-[#523AE0] text-white rounded-xl font-semibold transition-colors disabled:opacity-50 whitespace-nowrap shadow-sm cursor-pointer"
+                        >
+                            {aiTesting ? 'Analyzing...' : 'Run Test Analysis'}
+                        </button>
+                        <button 
+                            onClick={handleBackfill}
+                            disabled={aiTesting || isBackfilling}
+                            className="py-3 px-6 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold transition-colors disabled:opacity-50 whitespace-nowrap shadow-sm cursor-pointer"
+                        >
+                            {isBackfilling ? 'Backfilling...' : 'Backfill AI Embeddings'}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Hero Banner */}
