@@ -42,7 +42,9 @@ The pinnacle of this Capstone project introduces cutting-edge AI features:
 
 ### Prerequisites
 * Node.js (v18 or higher)
-* A Supabase account and project
+* Python 3.10+ (for the AI Service)
+* [Ollama](https://ollama.ai/) installed locally
+* A Supabase account and project (with `pgvector` extension enabled)
 * A GitHub account (for OAuth and API integration)
 
 ### 1. Clone the repository
@@ -51,26 +53,67 @@ git clone https://github.com/SANDY655/AI-Driven-Multi-Project-Software-Quality-I
 cd AI-Driven-Multi-Project-Software-Quality-Intelligence-Platform
 ```
 
-### 2. Install Dependencies
+### 2. Frontend Setup
+Install frontend dependencies:
 ```bash
 npm install
 ```
 
-### 3. Environment Variables
-Create a `.env` file in the root directory and add your Supabase credentials. You can duplicate `.env.example`:
+### 3. AI Backend Service Setup
+Navigate to the `ai-service` directory and install Python dependencies:
+```bash
+cd ai-service
+pip install -r requirements.txt
+```
+
+Download the required local AI models using Ollama:
+```bash
+ollama pull llama3.2:latest
+ollama pull nomic-embed-text
+```
+
+### 4. Environment Variables
+Create a `.env` file in the root directory and add the following credentials:
 ```env
+# Supabase Configuration
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+
+# AI Configuration
+GEMINI_API_KEY=your_gemini_api_key
+OLLAMA_BASE_URL=http://localhost:11434
+EMBEDDING_MODEL=nomic-embed-text
+LLM_MODEL=llama3.2:latest
 ```
 
-### 4. Database Setup
-The database schema, RLS policies, and triggers are located in `supabase/migrations/0000_initial.sql`.
-Execute this SQL script directly in your Supabase SQL Editor to instantly generate all 10 required tables and the strict security policies.
+### 5. Database Setup
+Ensure that the `vector` extension is enabled in your Supabase project (Database -> Extensions -> `vector`).
+Navigate to the `supabase/migrations/` folder and execute the SQL scripts in your Supabase SQL Editor in the following order:
+1. `0000_initial.sql`
+2. `0001_add_bug_comments_policies.sql`
+3. `0002_fix_roles_and_add_delete_policy.sql`
+4. `0003_rbac_enforcement.sql`
+5. `0004_create_tasks_table.sql`
+6. `20240723000001_add_pgvector.sql`
+7. `20240730000001_add_task_embedding.sql`
+8. `20240730000002_add_sla_and_task_commits.sql`
 
-### 5. Start the Development Server
+### 6. Start the Servers
+You need to run both the frontend and backend servers simultaneously.
+
+**Terminal 1 (Frontend):**
 ```bash
+# From the root directory
 npm run dev
 ```
+
+**Terminal 2 (AI Service):**
+```bash
+# From the ai-service directory
+uvicorn main:app --reload
+```
+
 Navigate to `http://localhost:5173` in your browser.
 
 ## 🔒 Database & Security Schema

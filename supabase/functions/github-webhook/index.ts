@@ -1,4 +1,13 @@
+// @ts-ignore: Deno URL imports are not recognized by standard TypeScript
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.8'
+
+// Type definitions to fix 'Cannot find name Deno' in non-Deno IDEs
+declare const Deno: {
+    serve: (handler: (req: Request) => Response | Promise<Response>) => void;
+    env: {
+        get: (key: string) => string | undefined;
+    };
+};
 
 // We define types for the GitHub webhook payload (simplified)
 interface GitHubPushPayload {

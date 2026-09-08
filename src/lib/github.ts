@@ -38,7 +38,8 @@ export const getRepoDetails = async (providerToken: string | undefined | null, o
         openIssues: repoData.data.open_issues_count,
         defaultBranch: repoData.data.default_branch,
         topics: repoData.data.topics,
-        branches: branchesData.data.map(b => b.name)
+        branches: branchesData.data.map(b => b.name),
+        private: repoData.data.private,
     }
 }
 
@@ -59,18 +60,53 @@ export const getRepoContributors = async (owner: string, repo: string, token?: s
 }
 
 export const getRepoCollaborators = async (owner: string, repo: string, token?: string) => {
+    if (!token) return []
     try {
-        if (!token) return [] // Need token for collaborators usually, especially for private repos
         const octokit = new Octokit({ auth: token })
-        const { data } = await octokit.rest.repos.listCollaborators({ owner, repo, per_page: 10 })
+        const { data } = await octokit.rest.repos.listCollaborators({ owner, repo, per_page: 20 })
         return data.map(c => ({
             login: c.login,
             avatar_url: c.avatar_url,
             html_url: c.html_url,
-            role_name: c.role_name
+            role_name: c.role_name ?? (c.permissions?.admin ? 'admin' : c.permissions?.push ? 'write' : 'read'),
         }))
     } catch (e: any) {
-        console.error('Failed to fetch collaborators:', e.message)
+        if (e.status !== 403) {
+            console.error('Failed to fetch collaborators:', e)
+        }
         return []
     }
+}
+
+export const createOrGetGitHubRelease = async (
+    owner: string,
+    repo: string,
+    tag_name: string,
+    name: string,
+    body: string,
+    token?: string
+) => {
+    const octokit = new Octokit(token ? { auth: token } : {})
+    
+    // Check if release tag already exists on GitHub
+    try {
+        const existing = await octokit.rest.repos.getReleaseByTag({ owner, repo, tag: tag_name })
+        if (existing.data?.html_url) {
+            return { data: existing.data, created: false }
+        }
+    } catch {
+        // Tag does not exist yet on GitHub, proceed to creation
+    }
+
+    const { data } = await octokit.rest.repos.createRelease({
+        owner,
+        repo,
+        tag_name,
+        name,
+        body,
+        draft: false,
+        prerelease: false,
+        generate_release_notes: true,
+    })
+    return { data, created: true }
 }

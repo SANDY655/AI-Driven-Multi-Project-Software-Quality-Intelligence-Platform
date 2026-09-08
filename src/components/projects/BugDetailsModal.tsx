@@ -6,11 +6,21 @@ import {
     Dialog,
     DialogContent,
     DialogTitle,
+    DialogDescription
 } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Loader2, UserPlus, Clock, MessageSquare, Activity, Trash2 } from 'lucide-react'
+import {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem
+} from '@/components/ui/dropdown-menu'
+import { X, UserPlus, Loader2, GitBranch, GitCommit, Clock, Github, FileCode2, Trash2, ArrowUp, ArrowDown, Minus, ChevronDown } from 'lucide-react'
+import { ConnectGithubModal } from './dev-tools/ConnectGithubModal'
+import { CreateBranchModal } from './dev-tools/CreateBranchModal'
+import { CreateCommitModal } from './dev-tools/CreateCommitModal'
+import { SubTasksChecklist } from './SubTasksChecklist'
 
 interface BugDetailsModalProps {
     bugId: string | null
@@ -20,50 +30,33 @@ interface BugDetailsModalProps {
     onUpdate: () => void
 }
 
-const PRIORITY_LABELS: Record<string, string> = {
-    P0: 'Critical',
-    P1: 'High',
-    P2: 'Medium',
-    P3: 'Low'
-}
-
-const STATUS_LABELS: Record<string, string> = {
-    open: 'Open',
-    in_progress: 'In Progress',
-    in_review: 'In Review',
-    resolved: 'Resolved',
-    closed: 'Closed'
-}
-
 export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, onClose, onUpdate }: BugDetailsModalProps) {
     const { user } = useAuth()
     const [bug, setBug] = useState<any>(null)
     const [comments, setComments] = useState<any[]>([])
-    const [activity, setActivity] = useState<any[]>([])
     const [members, setMembers] = useState<any[]>([])
     const [newComment, setNewComment] = useState('')
     const [loading, setLoading] = useState(true)
+    const { session } = useAuth()
+    const [project, setProject] = useState<any>(null)
     const [submittingComment, setSubmittingComment] = useState(false)
     const [commentError, setCommentError] = useState<string | null>(null)
     const [currentUserRole, setCurrentUserRole] = useState<string | undefined>(initialUserRole)
+    const [logWorkOpen, setLogWorkOpen] = useState(false)
+    const [logWorkTime, setLogWorkTime] = useState('')
+    const [branches, setBranches] = useState<any[]>([])
+    const [commits, setCommits] = useState<any[]>([])
+    const [epics, setEpics] = useState<any[]>([])
+    
+    // Dev Tools modals
+    const [connectGithubOpen, setConnectGithubOpen] = useState(false)
+    const [createBranchOpen, setCreateBranchOpen] = useState(false)
+    const [createCommitOpen, setCreateCommitOpen] = useState(false)
+    
 
-    // Compute permissions
     const canEditAll = ['admin', 'pm', 'tester'].includes(currentUserRole || '')
     const canEditStatus = ['admin', 'pm', 'tester', 'developer'].includes(currentUserRole || '')
-    const canPostComment = true // All project members can comment usually
     const canDelete = ['admin', 'pm'].includes(currentUserRole || '')
-
-    const formatValue = (action: string, value: string | null) => {
-        if (!value || value === 'null' || value === 'None') return 'None'
-        if (action.includes('status')) return STATUS_LABELS[value] || value
-        if (action.includes('priority')) return PRIORITY_LABELS[value] || value
-        if (action.includes('severity')) return value.charAt(0).toUpperCase() + value.slice(1)
-        if (action.includes('assigned')) {
-            const member = members.find(m => m.id === value)
-            return member?.display_name || 'User'
-        }
-        return value
-    }
 
     useEffect(() => {
         if (!bugId) return
@@ -86,7 +79,6 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
         if (bugError) console.error("Error loading bug:", bugError)
         setBug(bugData)
 
-        // Fetch project members for assignment
         const { data: membersData } = await supabase
             .from('project_members')
             .select(`
@@ -101,7 +93,6 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
             if (meta) setCurrentUserRole(meta.project_role)
         }
 
-        // Fetch comments
         const { data: commentsData } = await supabase
             .from('bug_comments')
             .select(`*, profiles(display_name, avatar_url)`)
@@ -110,16 +101,117 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
 
         setComments(commentsData || [])
 
-        // Fetch activity logs
-        const { data: activityData } = await supabase
-            .from('activity_log')
-            .select(`*, profiles(display_name, avatar_url)`)
-            .eq('bug_id', bugId)
-            .order('created_at', { ascending: false })
-            .limit(20)
+        const { data: epicsData } = await supabase
+            .from('epics')
+            .select('id, name')
+            .eq('project_id', projectId)
+        
+        setEpics(epicsData || [])
 
-        setActivity(activityData || [])
+        const { data: projData } = await supabase
+            .from('projects')
+            .select('github_owner, github_repo')
+            .eq('id', projectId)
+            .single()
+            
+        if (projData) setProject(projData)
+
+        // Load development links
+        const { data: branchesData } = await supabase
+            .from('branch_bug_links')
+            .select('branches(*)')
+            .eq('bug_id', bugId)
+        
+        if (branchesData) {
+            setBranches(branchesData.map((d: any) => d.branches).filter(Boolean))
+        }
+
+        const { data: commitsData } = await supabase
+            .from('commit_bug_links')
+            .select('commits(*)')
+            .eq('bug_id', bugId)
+        
+        if (commitsData) {
+            setCommits(commitsData.map((d: any) => d.commits).filter(Boolean))
+        }
+
         setLoading(false)
+    }
+
+    // SLA Calculation
+    const getSLADetails = () => {
+        if (!bug) return null
+        let slaHours = 0
+        switch (bug.priority) {
+            case 'P0': slaHours = 24; break;
+            case 'P1': slaHours = 48; break;
+            case 'P2': slaHours = 24 * 7; break;
+            case 'P3': slaHours = 24 * 14; break;
+            default: slaHours = 48;
+        }
+
+        const createdTime = new Date(bug.created_at).getTime()
+        const deadlineTime = createdTime + (slaHours * 60 * 60 * 1000)
+        
+        if (bug.resolved_at) {
+            const resolvedTime = new Date(bug.resolved_at).getTime()
+            return {
+                status: resolvedTime <= deadlineTime ? 'met' : 'breached_resolved',
+                text: resolvedTime <= deadlineTime ? 'SLA Met' : 'SLA Breached',
+                color: resolvedTime <= deadlineTime ? 'text-[#006644] bg-[#E3FCEF]' : 'text-[#DE350B] bg-[#FFEBE6]'
+            }
+        }
+
+        const now = new Date().getTime()
+        const remaining = deadlineTime - now
+
+        if (remaining < 0) {
+            const hoursBreached = Math.floor(Math.abs(remaining) / (1000 * 60 * 60))
+            return {
+                status: 'breached',
+                text: `Breached by ${hoursBreached}h`,
+                color: 'text-[#DE350B] bg-[#FFEBE6]'
+            }
+        }
+
+        const hoursLeft = Math.floor(remaining / (1000 * 60 * 60))
+        if (hoursLeft < 24) {
+            return {
+                status: 'warning',
+                text: `${hoursLeft}h remaining`,
+                color: 'text-[#FF8B00] bg-[#FFFAE6]'
+            }
+        }
+        
+        const daysLeft = Math.floor(hoursLeft / 24)
+        return {
+            status: 'ok',
+            text: `${daysLeft}d remaining`,
+            color: 'text-[#0052CC] bg-[#DEEBFF]'
+        }
+    }
+
+    async function handleLogWork() {
+        if (!bug || !bugId || !logWorkTime) return
+        
+        const timeStr = logWorkTime.toLowerCase()
+        let minutes = 0
+        const hoursMatch = timeStr.match(/(\d+)\s*h/)
+        const minsMatch = timeStr.match(/(\d+)\s*m/)
+        
+        if (hoursMatch) minutes += parseInt(hoursMatch[1]) * 60
+        if (minsMatch) minutes += parseInt(minsMatch[1])
+        
+        if (!hoursMatch && !minsMatch && !isNaN(parseInt(timeStr))) {
+            minutes += parseInt(timeStr)
+        }
+
+        if (minutes > 0) {
+            const newTotal = (bug.time_spent || 0) + minutes
+            await updateField('time_spent', newTotal.toString())
+            setLogWorkOpen(false)
+            setLogWorkTime('')
+        }
     }
 
     async function handleAddComment() {
@@ -140,7 +232,6 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
             setCommentError(error.message)
         } else {
             setNewComment('')
-            // Optimistic refresh
             loadData()
         }
         setSubmittingComment(false)
@@ -148,29 +239,46 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
 
     async function updateField(field: string, value: string | null) {
         if (!bug || !bugId || bug[field] === value) return
-
         const oldValue = bug[field]
+
+        const updatePayload: any = {}
+        updatePayload[field] = value
+
+        // Check for resolution
+        const isResolving = (field === 'status' && (value === 'resolved' || value === 'closed'))
+        const isUnresolving = (field === 'status' && (value !== 'resolved' && value !== 'closed') && (bug.status === 'resolved' || bug.status === 'closed'))
+        
+        let extraUpdate = {}
+        if (isResolving && !bug.resolved_at) {
+            extraUpdate = { resolved_at: new Date().toISOString() }
+        } else if (isUnresolving) {
+            extraUpdate = { resolved_at: null }
+        }
 
         const { error } = await supabase
             .from('bugs')
-            .update({ [field]: value })
+            .update({ ...updatePayload, [field]: field === 'story_points' || field === 'original_estimate' || field === 'time_spent' ? parseInt(value as string) || 0 : value, ...extraUpdate })
             .eq('id', bugId)
 
         if (!error) {
-            // Log activity manually if not handled by triggers (since there's no DB trigger for activity yet)
+            if (field === 'duplicate_of' && value) {
+                const { mergeDuplicateBug } = await import('@/lib/bug-actions')
+                await mergeDuplicateBug(bugId, bug.bug_display_id, value, user?.id || '')
+            }
+
             await supabase
                 .from('activity_log')
                 .insert({
                     bug_id: bugId,
                     user_id: user?.id,
                     action: `${field}_changed`,
-                    old_value: oldValue || 'None',
-                    new_value: value || 'None'
+                    old_value: oldValue ? oldValue.toString() : 'None',
+                    new_value: value ? value.toString() : 'None'
                 })
 
-            setBug({ ...bug, [field]: value })
+            setBug({ ...bug, ...updatePayload, [field]: field === 'story_points' || field === 'original_estimate' || field === 'time_spent' ? parseInt(value as string) || 0 : value, ...extraUpdate })
             onUpdate()
-            loadData() // refresh logs
+            loadData()
         }
     }
 
@@ -193,295 +301,582 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
 
     if (!bugId) return null
 
+    const selectClasses = "w-full bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#172B4D] border-transparent transition-colors rounded-[3px] focus:ring-[#4C9AFF]"
+
     return (
         <Dialog open={!!bugId} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="sm:max-w-[900px] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden bg-zinc-950 border-zinc-800">
+            <DialogContent showCloseButton={false} className="sm:max-w-[1040px] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden bg-white border-0 shadow-[0_8px_16px_-4px_rgba(9,30,66,0.25),0_0_1px_rgba(9,30,66,0.31)] rounded-[3px]">
+                <DialogDescription className="sr-only">Bug Details</DialogDescription>
                 {loading || !bug ? (
-                    <div className="flex-1 flex items-center justify-center">
-                        <Loader2 className="h-8 w-8 animate-spin text-zinc-500" />
+                    <div className="flex-1 flex items-center justify-center bg-[#FAFBFC]">
+                        <Loader2 className="h-8 w-8 animate-spin text-[#0052CC]" />
                     </div>
                 ) : (
                     <>
-                        {/* Header */}
-                        <div className="p-6 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-start">
-                            <div>
-                                <div className="flex items-center gap-3 mb-2">
-                                    <span className="text-sm font-mono text-zinc-400 bg-zinc-800 px-2 py-1 rounded">
-                                        {bug.bug_display_id}
-                                    </span>
+                        <div className="px-6 py-4 flex justify-between items-start flex-shrink-0 border-b border-[#DFE1E6]">
+                            <div className="flex flex-col gap-1">
+                                <div className="text-[12px] font-medium text-[#5E6C84]">
+                                    {bug.bug_display_id}
                                 </div>
-                                <DialogTitle className="text-2xl font-semibold text-white">
+                                <DialogTitle className="text-2xl font-medium text-[#172B4D]">
                                     {bug.title}
                                 </DialogTitle>
                             </div>
                             <div className="flex items-center gap-2">
                                 {canDelete && (
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
+                                    <button
                                         onClick={handleDeleteBug}
-                                        className="h-9 w-9 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                        className="p-2 text-[#5E6C84] hover:text-[#DE350B] hover:bg-[#FFEBE6] rounded-[3px] transition-colors"
                                         title="Delete Bug"
                                     >
                                         <Trash2 className="h-4 w-4" />
-                                    </Button>
+                                    </button>
                                 )}
+                                <button
+                                    onClick={onClose}
+                                    className="p-2 text-[#5E6C84] hover:text-[#172B4D] hover:bg-[#EBECF0] rounded-[3px] transition-colors"
+                                    title="Close"
+                                >
+                                    <X className="h-5 w-5" />
+                                </button>
                             </div>
                         </div>
 
-                        {/* Body layout */}
-                        <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
-                            {/* Main Content (Left) */}
-                            <div className="flex-1 flex flex-col h-full overflow-y-auto border-r border-zinc-800 p-6 space-y-8 no-scrollbar">
-                                {/* Description */}
+                        <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-white">
+                            <div className="w-[65%] flex flex-col h-full overflow-y-auto border-r border-[#DFE1E6] p-6 space-y-8 no-scrollbar bg-white">
                                 <section>
-                                    <h3 className="text-xs font-semibold text-zinc-400 mb-4 uppercase tracking-widest flex items-center gap-2">
+                                    <h3 className="text-[14px] font-semibold text-[#172B4D] mb-4">
                                         Description
                                     </h3>
-                                    <div className="text-zinc-300 whitespace-pre-wrap text-sm leading-relaxed bg-zinc-900/30 p-5 rounded-2xl border border-zinc-800/50 shadow-inner">
+                                    <div className="text-[#172B4D] whitespace-pre-wrap text-sm leading-relaxed p-2 -mx-2 hover:bg-[#FAFBFC] rounded transition-colors cursor-text">
                                         {bug.description || 'No description provided.'}
                                     </div>
                                 </section>
 
-                                {/* Comments Section */}
                                 <section className="flex-1 flex flex-col">
-                                    <h3 className="text-sm font-medium text-zinc-400 mb-4 uppercase tracking-wider flex items-center gap-2">
-                                        <MessageSquare className="h-4 w-4" /> Discussion
+                                    <h3 className="text-[14px] font-semibold text-[#172B4D] mb-4">
+                                        Activity
                                     </h3>
 
                                     <div className="flex-1 overflow-y-auto mb-6 pr-2 no-scrollbar min-h-[200px]">
-                                        <div className="space-y-4">
+                                        <div className="space-y-6">
                                             {comments.map(c => (
-                                                <div key={c.id} className="flex gap-4 group">
+                                                <div key={c.id} className="flex gap-4">
                                                     <div className="flex-shrink-0 mt-1">
                                                         {c.profiles?.avatar_url ? (
-                                                            <img src={c.profiles.avatar_url} className="h-9 w-9 rounded-full ring-2 ring-zinc-800" alt="avatar" />
+                                                            <img src={c.profiles.avatar_url} className="h-8 w-8 rounded-full" alt="avatar" />
                                                         ) : (
-                                                            <div className="h-9 w-9 rounded-full bg-blue-500/10 text-blue-400 flex items-center justify-center font-bold text-xs border border-blue-500/20">
+                                                            <div className="h-8 w-8 rounded-full bg-[#0052CC] text-white flex items-center justify-center font-bold text-[11px]">
                                                                 {c.profiles?.display_name?.charAt(0) || '?'}
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <div className="flex-1 bg-zinc-900/40 rounded-xl p-4 border border-zinc-800/50 group-hover:border-zinc-700/50 transition-all duration-200">
-                                                        <div className="flex items-center justify-between mb-1.5">
-                                                            <span className="text-sm font-semibold text-zinc-100">{c.profiles?.display_name}</span>
-                                                            <span className="text-[11px] text-zinc-500 flex items-center gap-1.5 font-medium">
-                                                                <Clock className="h-3 w-3" />
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="text-[14px] font-semibold text-[#172B4D]">{c.profiles?.display_name}</span>
+                                                            <span className="text-[12px] text-[#5E6C84]">
                                                                 {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
                                                             </span>
                                                         </div>
-                                                        <div className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">{c.content}</div>
+                                                        <div className="text-sm text-[#172B4D] whitespace-pre-wrap leading-relaxed">{c.content}</div>
                                                     </div>
                                                 </div>
                                             ))}
                                             {comments.length === 0 && (
-                                                <div className="flex flex-col items-center justify-center p-12 bg-zinc-900/20 rounded-2xl border border-dashed border-zinc-800/60">
-                                                    <MessageSquare className="h-8 w-8 text-zinc-700 mb-3 opacity-20" />
-                                                    <p className="text-sm text-zinc-500 font-medium">No comments yet</p>
-                                                    <p className="text-xs text-zinc-600 mt-1">Be the first to start the discussion</p>
-                                                </div>
+                                                <div className="text-[14px] text-[#5E6C84]">No comments yet.</div>
                                             )}
                                         </div>
                                     </div>
 
-                                    <div className="mt-auto pt-4 border-t border-zinc-800/50 bg-zinc-950/20 rounded-b-xl">
-                                        <div className="relative">
+                                    <div className="mt-auto flex gap-4">
+                                        {user?.user_metadata?.avatar_url ? (
+                                            <img src={user.user_metadata.avatar_url} className="h-8 w-8 rounded-full" alt="avatar" />
+                                        ) : (
+                                            <div className="h-8 w-8 rounded-full bg-[#0052CC] text-white flex items-center justify-center font-bold text-[11px] shrink-0 mt-1">
+                                                {user?.email?.charAt(0).toUpperCase() || '?'}
+                                            </div>
+                                        )}
+                                        <div className="flex-1 border border-[#DFE1E6] rounded-[3px] overflow-hidden focus-within:border-[#4C9AFF] focus-within:ring-1 focus-within:ring-[#4C9AFF]">
                                             <Textarea
-                                                placeholder="Write a comment..."
+                                                placeholder="Add a comment..."
                                                 value={newComment}
                                                 onChange={(e) => {
                                                     setNewComment(e.target.value)
                                                     if (commentError) setCommentError(null)
                                                 }}
-                                                className="min-h-[100px] mb-3 bg-zinc-900/30 border-zinc-800 text-white focus:border-blue-500/50 focus:ring-blue-500/10 transition-shadow resize-none rounded-xl"
+                                                className="min-h-[80px] bg-white border-none text-[#172B4D] resize-y focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none text-sm"
                                             />
-                                            {commentError && (
-                                                <div className="absolute top-2 right-2 text-[10px] text-red-400 bg-red-400/10 px-2 py-1 rounded border border-red-400/20">
-                                                    Failed to post: {commentError}
+                                            <div className="bg-[#FAFBFC] border-t border-[#DFE1E6] px-3 py-2 flex items-center justify-between">
+                                                <span className="text-xs text-[#DE350B]">{commentError}</span>
+                                                <div className="flex justify-end gap-2">
+                                                    <button
+                                                        disabled={submittingComment || !newComment.trim()}
+                                                        onClick={handleAddComment}
+                                                        className="bg-[#0052CC] hover:bg-[#0047B3] disabled:opacity-50 text-white rounded-[3px] px-4 py-1.5 font-medium text-sm transition-colors flex items-center gap-2"
+                                                    >
+                                                        {submittingComment && <Loader2 className="h-3 w-3 animate-spin" />}
+                                                        Save
+                                                    </button>
                                                 </div>
-                                            )}
-                                        </div>
-                                        <div className="flex justify-end items-center gap-4">
-                                            {commentError && <span className="text-xs text-red-400 font-medium">Try again or check your permissions</span>}
-                                            <Button
-                                                disabled={submittingComment || !newComment.trim()}
-                                                onClick={handleAddComment}
-                                                className="bg-blue-600 hover:bg-blue-500 text-white border-none shadow-lg shadow-blue-900/20 px-6"
-                                            >
-                                                {submittingComment ? (
-                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                ) : (
-                                                    <MessageSquare className="mr-2 h-4 w-4" />
-                                                )}
-                                                {canPostComment ? 'Comment' : 'Read Only'}
-                                            </Button>
+                                            </div>
                                         </div>
                                     </div>
                                 </section>
                             </div>
 
-                            {/* Sidebar (Right) */}
-                            <div className="w-full md:w-72 bg-zinc-950 p-6 flex flex-col h-full overflow-y-auto no-scrollbar space-y-6">
-                                {/* Attributes */}
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="text-xs text-zinc-500 font-medium mb-1.5 block uppercase tracking-wider">Status</label>
-                                        <Select
-                                            value={bug.status}
-                                            onValueChange={(val) => updateField('status', val)}
-                                            disabled={!canEditStatus}
-                                        >
-                                            <SelectTrigger className="w-full bg-zinc-900 text-white border-zinc-800 disabled:opacity-50">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="open">Open</SelectItem>
-                                                <SelectItem value="in_progress">In Progress</SelectItem>
-                                                <SelectItem value="in_review">In Review</SelectItem>
-                                                <SelectItem value="resolved">Resolved</SelectItem>
-                                                <SelectItem value="closed">Closed</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
+                            <div className="w-[35%] p-6 flex flex-col h-full overflow-y-auto no-scrollbar space-y-6">
+                                <div className="space-y-1">
+                                    <Select
+                                        value={bug.status}
+                                        onValueChange={(val) => updateField('status', val)}
+                                        disabled={!canEditStatus}
+                                    >
+                                        <SelectTrigger className="w-fit bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#42526E] font-medium border-none h-8 text-[12px] uppercase">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="open">OPEN</SelectItem>
+                                            <SelectItem value="in_progress">IN PROGRESS</SelectItem>
+                                            <SelectItem value="in_review">IN REVIEW</SelectItem>
+                                            <SelectItem value="resolved">RESOLVED</SelectItem>
+                                            <SelectItem value="closed">CLOSED</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
 
-                                    <div>
-                                        <label className="text-xs text-zinc-500 font-medium mb-1.5 block uppercase tracking-wider">Assignee</label>
-                                        <Select
-                                            value={bug.assigned_to || 'unassigned'}
-                                            onValueChange={(val) => updateField('assigned_to', val === 'unassigned' ? null : val)}
-                                            disabled={!canEditAll}
-                                        >
-                                            <SelectTrigger className="w-full bg-zinc-900 border-zinc-800 text-white disabled:opacity-50">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="unassigned" className="text-zinc-500 italic">Unassigned</SelectItem>
-                                                {members.map(m => (
-                                                    <SelectItem key={m.id} value={m.id}>
-                                                        <div className="flex items-center gap-2">
-                                                            {m.avatar_url ? (
-                                                                <img src={m.avatar_url} className="h-4 w-4 rounded-full" />
-                                                            ) : (
-                                                                <UserPlus className="h-4 w-4 text-zinc-500" />
-                                                            )}
-                                                            {m.display_name}
-                                                        </div>
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                <div className="border border-[#DFE1E6] rounded-[3px]">
+                                    <div className="p-3 border-b border-[#DFE1E6] font-medium text-[14px] text-[#172B4D]">
+                                        Details
                                     </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-xs text-zinc-500 font-medium mb-1.5 block uppercase tracking-wider">Priority</label>
-                                            <Select
-                                                value={bug.priority}
-                                                onValueChange={(val) => updateField('priority', val)}
-                                                disabled={!canEditAll}
-                                            >
-                                                <SelectTrigger className="w-full bg-zinc-900 text-white border-zinc-800 disabled:opacity-50">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="P0">P0 - Critical</SelectItem>
-                                                    <SelectItem value="P1">P1 - High</SelectItem>
-                                                    <SelectItem value="P2">P2 - Medium</SelectItem>
-                                                    <SelectItem value="P3">P3 - Low</SelectItem>
-                                                </SelectContent>
-                                            </Select>
+                                    <div className="p-3 space-y-4">
+                                        <div className="flex items-center">
+                                            <label className="text-[12px] font-semibold text-[#5E6C84] w-1/3">Assignee</label>
+                                            <div className="w-2/3">
+                                                <Select
+                                                    value={bug.assigned_to || 'unassigned'}
+                                                    onValueChange={(val) => updateField('assigned_to', val === 'unassigned' ? null : val)}
+                                                    disabled={!canEditAll}
+                                                >
+                                                    <SelectTrigger className={selectClasses}>
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="unassigned" className="text-[#5E6C84]">Unassigned</SelectItem>
+                                                        {members.map(m => (
+                                                            <SelectItem key={m.id} value={m.id}>
+                                                                <div className="flex items-center gap-2">
+                                                                    {m.avatar_url ? (
+                                                                        <img src={m.avatar_url} className="h-5 w-5 rounded-full" />
+                                                                    ) : (
+                                                                        <UserPlus className="h-4 w-4 text-[#5E6C84]" />
+                                                                    )}
+                                                                    {m.display_name}
+                                                                </div>
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
                                         </div>
 
-                                        <div>
-                                            <label className="text-xs text-zinc-500 font-medium mb-1.5 block uppercase tracking-wider">Severity</label>
-                                            <Select
-                                                value={bug.severity}
-                                                onValueChange={(val) => updateField('severity', val)}
-                                                disabled={!canEditAll}
-                                            >
-                                                <SelectTrigger className="w-full bg-zinc-900 text-white border-zinc-800 disabled:opacity-50">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="critical">Critical</SelectItem>
-                                                    <SelectItem value="high">High</SelectItem>
-                                                    <SelectItem value="medium">Medium</SelectItem>
-                                                    <SelectItem value="low">Low</SelectItem>
-                                                </SelectContent>
-                                            </Select>
+                                        <div className="flex items-center">
+                                            <label className="text-[12px] font-semibold text-[#5E6C84] w-1/3">Priority</label>
+                                            <div className="w-2/3">
+                                                <Select
+                                                    value={bug.priority}
+                                                    onValueChange={(val) => updateField('priority', val)}
+                                                    disabled={!canEditAll}
+                                                >
+                                                    <SelectTrigger className={selectClasses}>
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="P0"><div className="flex items-center gap-2"><ArrowUp className="w-4 h-4 text-[#DE350B]" /> Highest</div></SelectItem>
+                                                        <SelectItem value="P1"><div className="flex items-center gap-2"><ArrowUp className="w-4 h-4 text-[#FF5630]" /> High</div></SelectItem>
+                                                        <SelectItem value="P2"><div className="flex items-center gap-2"><Minus className="w-4 h-4 text-[#FFAB00]" /> Medium</div></SelectItem>
+                                                        <SelectItem value="P3"><div className="flex items-center gap-2"><ArrowDown className="w-4 h-4 text-[#0065FF]" /> Low</div></SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
                                         </div>
-                                    </div>
 
-                                    <div className="pt-4 border-t border-zinc-800/50">
-                                        <div className="text-xs text-zinc-500 mb-1">Reported by</div>
-                                        <div className="flex items-center gap-2 text-sm text-zinc-300">
-                                            {bug.reporter?.avatar_url && <img src={bug.reporter.avatar_url} className="h-5 w-5 rounded-full" />}
-                                            {bug.reporter?.display_name || 'Unknown'}
+                                        <div className="flex items-center">
+                                            <label className="text-[12px] font-semibold text-[#5E6C84] w-1/3">Severity</label>
+                                            <div className="w-2/3">
+                                                <Select
+                                                    value={bug.severity}
+                                                    onValueChange={(val) => updateField('severity', val)}
+                                                    disabled={!canEditAll}
+                                                >
+                                                    <SelectTrigger className={selectClasses}>
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="critical">Critical</SelectItem>
+                                                        <SelectItem value="high">High</SelectItem>
+                                                        <SelectItem value="medium">Medium</SelectItem>
+                                                        <SelectItem value="low">Low</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center">
+                                            <label className="text-[12px] font-semibold text-[#5E6C84] w-1/3 flex items-center gap-1">
+                                                Story Points
+                                                <span title="Relative effort score — not hours! Common scale: 1=trivial, 3=small, 5=medium, 8=large, 13=very complex. Used for sprint planning." className="cursor-help text-[#A5ADBA] hover:text-[#5E6C84] text-[10px] border border-[#A5ADBA] rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold flex-shrink-0">?</span>
+                                            </label>
+                                            <div className="w-2/3">
+                                                <input 
+                                                    type="number" 
+                                                    value={bug.story_points === '' || bug.story_points == null ? '' : Number(bug.story_points)} 
+                                                    onChange={(e) => setBug({ ...bug, story_points: e.target.value === '' ? '' : e.target.value })}
+                                                    onBlur={(e) => updateField('story_points', e.target.value)}
+                                                    className={`${selectClasses} px-3 py-1.5 outline-none`}
+                                                    placeholder="0"
+                                                    disabled={!canEditAll}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center">
+                                            <label className="text-[12px] font-semibold text-[#5E6C84] w-1/3">Epic Link</label>
+                                            <div className="w-2/3">
+                                                <Select
+                                                    value={bug.epic_id || 'unassigned'}
+                                                    onValueChange={(val) => updateField('epic_id', val === 'unassigned' ? null : val)}
+                                                    disabled={!canEditAll}
+                                                >
+                                                    <SelectTrigger className={selectClasses}>
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="unassigned" className="text-[#5E6C84]">None</SelectItem>
+                                                        {epics.map(e => (
+                                                            <SelectItem key={e.id} value={e.id}>
+                                                                {e.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center">
+                                            <label className="text-[12px] font-semibold text-[#5E6C84] w-1/3 flex items-center gap-1">
+                                                SLA <Clock className="w-3 h-3" />
+                                                <span title="Service Level Agreement — a time deadline to resolve this bug based on priority. P0=24h, P1=48h, P2=1 week, P3=2 weeks. Red means breached, orange means warning (<24h left)." className="cursor-help text-[#A5ADBA] hover:text-[#5E6C84] text-[10px] border border-[#A5ADBA] rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold flex-shrink-0">?</span>
+                                            </label>
+                                            <div className="w-2/3">
+                                                {(() => {
+                                                    const sla = getSLADetails()
+                                                    if (!sla) return <span className="text-xs text-[#5E6C84]">-</span>
+                                                    return (
+                                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-[3px] text-[11px] font-bold ${sla.color}`}>
+                                                            {sla.text}
+                                                        </span>
+                                                    )
+                                                })()}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Activity Log (Mini) */}
-                                <div className="flex-1 min-h-[300px] border-t border-zinc-800/60 pt-6">
-                                    <h3 className="text-xs font-semibold text-zinc-400 mb-5 uppercase tracking-widest flex items-center gap-2">
-                                        <Activity className="h-3.5 w-3.5 text-blue-400" /> Recent Activity
-                                    </h3>
-                                    <div className="space-y-6">
-                                        {activity.map((act, i) => {
-                                            const isStatus = act.action.includes('status')
-                                            const isPriority = act.action.includes('priority')
-                                            const isSeverity = act.action.includes('severity')
-                                            const isAssignee = act.action.includes('assigned')
-
-                                            return (
-                                                <div key={act.id} className="relative pl-6 group">
-                                                    {/* Timeline connector */}
-                                                    {i !== activity.length - 1 && (
-                                                        <div className="absolute left-[7px] top-4 bottom-[-24px] w-[1px] bg-zinc-800 group-hover:bg-zinc-700 transition-colors" />
-                                                    )}
-
-                                                    {/* Icon dot */}
-                                                    <div className={`absolute left-0 top-1 h-3.5 w-3.5 rounded-full ring-4 ring-zinc-950 flex items-center justify-center transition-all duration-300 ${isStatus ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]' :
-                                                        isPriority ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]' :
-                                                            isSeverity ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.3)]' :
-                                                                isAssignee ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.3)]' :
-                                                                    'bg-zinc-600'
-                                                        }`}>
-                                                        <div className="h-1.5 w-1.5 rounded-full bg-white/40" />
+                                <div className="border border-[#DFE1E6] rounded-[3px]">
+                                    <div className="p-3 border-b border-[#DFE1E6] font-medium text-[14px] text-[#172B4D]">
+                                        Development
+                                    </div>
+                                    <div className="p-3 space-y-4">
+                                        {branches.length > 0 && (
+                                            <div className="space-y-2">
+                                                <div className="text-[12px] font-semibold text-[#5E6C84]">Branches</div>
+                                                {branches.map(b => (
+                                                    <div key={b.id} className="flex items-center gap-2 text-sm">
+                                                        <GitBranch className="w-4 h-4 text-[#5E6C84]" />
+                                                        <span className="text-[#0052CC] hover:underline cursor-pointer truncate">{b.name}</span>
                                                     </div>
-
-                                                    <div className="text-xs text-zinc-400">
-                                                        <div className="flex items-center gap-1.5 mb-1">
-                                                            <span className="font-bold text-zinc-200">{act.profiles?.display_name || 'System'}</span>
-                                                            <span className="text-zinc-500">updated</span>
-                                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${isStatus ? 'bg-emerald-500/10 text-emerald-400' :
-                                                                isPriority ? 'bg-amber-500/10 text-amber-400' :
-                                                                    isSeverity ? 'bg-rose-500/10 text-rose-400' :
-                                                                        isAssignee ? 'bg-blue-500/10 text-blue-400' :
-                                                                            'bg-zinc-800 text-zinc-400'
-                                                                }`}>
-                                                                {act.action.replace('_changed', '').replace('_', ' ')}
-                                                            </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {commits.length > 0 && (
+                                            <div className="space-y-2">
+                                                <div className="text-[12px] font-semibold text-[#5E6C84]">Commits</div>
+                                                {commits.map(c => (
+                                                    <div key={c.id} className="flex items-center justify-between text-sm group">
+                                                        <div className="flex items-center gap-2 overflow-hidden">
+                                                            <GitCommit className="w-4 h-4 text-[#5E6C84]" />
+                                                            <span className="text-[#0052CC] hover:underline cursor-pointer truncate" title={c.message}>{c.message}</span>
                                                         </div>
+                                                        <span className="text-xs text-[#5E6C84] font-mono shrink-0 ml-2">{c.sha}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        
+                                        <div className="flex flex-col gap-2 pt-2 border-t border-[#DFE1E6]">
+                                            {(() => {
+                                                const githubToken = session?.provider_token || localStorage.getItem(`github_pat_${projectId}`)
+                                                const isGithubConnected = !!githubToken && !!project?.github_owner && !!project?.github_repo
 
-                                                        <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-lg p-2 mt-1.5 group-hover:border-zinc-700/50 transition-colors">
-                                                            <span className="text-zinc-500 italic">{formatValue(act.action, act.old_value)}</span>
-                                                            <span className="mx-2 text-zinc-700 font-mono">&rarr;</span>
-                                                            <span className="text-zinc-200 font-medium">{formatValue(act.action, act.new_value)}</span>
+                                                if (!isGithubConnected && project?.github_owner) {
+                                                    return (
+                                                        <button 
+                                                            onClick={() => setConnectGithubOpen(true)}
+                                                            className="text-sm bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#172B4D] px-3 py-1.5 rounded-[3px] font-medium transition-colors border border-[#DFE1E6] flex items-center justify-center gap-2"
+                                                        >
+                                                            <Github className="w-4 h-4 text-[#5E6C84]" />
+                                                            Connect GitHub
+                                                        </button>
+                                                    )
+                                                }
+
+                                                return (
+                                                    <>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <button 
+                                                                onClick={() => setCreateBranchOpen(true)}
+                                                                disabled={!isGithubConnected}
+                                                                className="text-[13px] bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#172B4D] px-2 py-1.5 rounded-[3px] font-medium transition-colors border border-[#DFE1E6] flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                                            >
+                                                                <GitBranch className="w-3.5 h-3.5 text-[#5E6C84]" />
+                                                                Create branch
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => setCreateCommitOpen(true)}
+                                                                disabled={!isGithubConnected}
+                                                                className="text-[13px] bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#172B4D] px-2 py-1.5 rounded-[3px] font-medium transition-colors border border-[#DFE1E6] flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                                            >
+                                                                <GitCommit className="w-3.5 h-3.5 text-[#5E6C84]" />
+                                                                Create commit
+                                                            </button>
                                                         </div>
+                                                        {isGithubConnected && (
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <button className="w-full text-[13px] bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#172B4D] px-2 py-1.5 rounded-[3px] font-medium transition-colors border border-[#DFE1E6] flex items-center justify-between mt-1">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <FileCode2 className="w-3.5 h-3.5 text-[#5E6C84]" />
+                                                                            Open in coding tool
+                                                                        </div>
+                                                                        <ChevronDown className="w-3.5 h-3.5 text-[#5E6C84]" />
+                                                                    </button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="end" className="w-[320px] p-0 shadow-[0_8px_16px_-4px_rgba(9,30,66,0.25),0_0_1px_rgba(9,30,66,0.31)] rounded-[3px] border-none mt-1">
+                                                                    <div className="p-4 border-b border-[#DFE1E6]">
+                                                                        <h4 className="text-[14px] font-medium text-[#172B4D] mb-1">Open in coding tool</h4>
+                                                                        <p className="text-[12px] text-[#5E6C84] leading-relaxed">
+                                                                            Clone and open this repo in your preferred editor.
+                                                                        </p>
+                                                                    </div>
+                                                                    <div className="p-2 max-h-[280px] overflow-y-auto">
+                                                                        <div className="text-[11px] font-bold text-[#5E6C84] uppercase px-2 mb-1 mt-1">Select tool</div>
+                                                                        <DropdownMenuItem asChild className="cursor-pointer focus:bg-[#EBECF0] focus:text-[#172B4D] rounded-[3px] mx-1">
+                                                                            <a 
+                                                                                href={`vscode://vscode.git/clone?url=https://github.com/${project.github_owner}/${project.github_repo}.git`}
+                                                                                className="flex items-center gap-3 py-2 px-2"
+                                                                            >
+                                                                                <img src="https://code.visualstudio.com/favicon.ico" className="w-4 h-4" alt="VS Code" onError={(e) => { (e.target as HTMLImageElement).style.display='none' }} />
+                                                                                <div>
+                                                                                    <div className="text-[13px] font-medium text-[#172B4D]">VS Code</div>
+                                                                                    <div className="text-[11px] text-[#5E6C84]">Microsoft</div>
+                                                                                </div>
+                                                                            </a>
+                                                                        </DropdownMenuItem>
+                                                                        <DropdownMenuItem asChild className="cursor-pointer focus:bg-[#EBECF0] focus:text-[#172B4D] rounded-[3px] mx-1">
+                                                                            <a 
+                                                                                href={`cursor://vscode.git/clone?url=https://github.com/${project.github_owner}/${project.github_repo}.git`}
+                                                                                className="flex items-center gap-3 py-2 px-2"
+                                                                            >
+                                                                                <img src="https://www.cursor.com/favicon.ico" className="w-4 h-4" alt="Cursor" onError={(e) => { (e.target as HTMLImageElement).style.display='none' }} />
+                                                                                <div>
+                                                                                    <div className="text-[13px] font-medium text-[#172B4D]">Cursor</div>
+                                                                                    <div className="text-[11px] text-[#5E6C84]">AI-first editor</div>
+                                                                                </div>
+                                                                            </a>
+                                                                        </DropdownMenuItem>
+                                                                        <DropdownMenuItem asChild className="cursor-pointer focus:bg-[#EBECF0] focus:text-[#172B4D] rounded-[3px] mx-1">
+                                                                            <a 
+                                                                                href={`windsurf://vscode.git/clone?url=https://github.com/${project.github_owner}/${project.github_repo}.git`}
+                                                                                className="flex items-center gap-3 py-2 px-2"
+                                                                            >
+                                                                                <img src="https://codeium.com/favicon.ico" className="w-4 h-4" alt="Windsurf" onError={(e) => { (e.target as HTMLImageElement).style.display='none' }} />
+                                                                                <div>
+                                                                                    <div className="text-[13px] font-medium text-[#172B4D]">Windsurf</div>
+                                                                                    <div className="text-[11px] text-[#5E6C84]">Codeium</div>
+                                                                                </div>
+                                                                            </a>
+                                                                        </DropdownMenuItem>
+                                                                        <DropdownMenuItem asChild className="cursor-pointer focus:bg-[#EBECF0] focus:text-[#172B4D] rounded-[3px] mx-1">
+                                                                            <a 
+                                                                                href={`jetbrains://idea/checkout/git?idea.required.plugins.id=Git4Idea&checkout.repo=https://github.com/${project.github_owner}/${project.github_repo}.git`}
+                                                                                className="flex items-center gap-3 py-2 px-2"
+                                                                            >
+                                                                                <img src="https://www.jetbrains.com/favicon.ico" className="w-4 h-4" alt="IntelliJ" onError={(e) => { (e.target as HTMLImageElement).style.display='none' }} />
+                                                                                <div>
+                                                                                    <div className="text-[13px] font-medium text-[#172B4D]">IntelliJ IDEA</div>
+                                                                                    <div className="text-[11px] text-[#5E6C84]">JetBrains</div>
+                                                                                </div>
+                                                                            </a>
+                                                                        </DropdownMenuItem>
+                                                                        <DropdownMenuItem asChild className="cursor-pointer focus:bg-[#EBECF0] focus:text-[#172B4D] rounded-[3px] mx-1">
+                                                                            <a 
+                                                                                href={`webstorm://open?url=https://github.com/${project.github_owner}/${project.github_repo}`}
+                                                                                className="flex items-center gap-3 py-2 px-2"
+                                                                            >
+                                                                                <img src="https://www.jetbrains.com/favicon.ico" className="w-4 h-4" alt="WebStorm" onError={(e) => { (e.target as HTMLImageElement).style.display='none' }} />
+                                                                                <div>
+                                                                                    <div className="text-[13px] font-medium text-[#172B4D]">WebStorm</div>
+                                                                                    <div className="text-[11px] text-[#5E6C84]">JetBrains</div>
+                                                                                </div>
+                                                                            </a>
+                                                                        </DropdownMenuItem>
+                                                                        <DropdownMenuItem asChild className="cursor-pointer focus:bg-[#EBECF0] focus:text-[#172B4D] rounded-[3px] mx-1">
+                                                                            <a 
+                                                                                href={`https://github.com/${project.github_owner}/${project.github_repo}`}
+                                                                                target="_blank"
+                                                                                rel="noreferrer"
+                                                                                className="flex items-center gap-3 py-2 px-2"
+                                                                            >
+                                                                                <img src="https://github.com/favicon.ico" className="w-4 h-4" alt="GitHub" onError={(e) => { (e.target as HTMLImageElement).style.display='none' }} />
+                                                                                <div>
+                                                                                    <div className="text-[13px] font-medium text-[#172B4D]">GitHub.com</div>
+                                                                                    <div className="text-[11px] text-[#5E6C84]">Open in browser</div>
+                                                                                </div>
+                                                                            </a>
+                                                                        </DropdownMenuItem>
+                                                                    </div>
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                        )}
+                                                    </>
+                                                )
+                                            })()}
+                                        </div>
+                                    </div>
+                                </div>
 
-                                                        <div className="text-[10px] text-zinc-600 mt-2 flex items-center gap-1 font-medium">
-                                                            <Clock className="h-2.5 w-2.5" />
-                                                            {formatDistanceToNow(new Date(act.created_at), { addSuffix: true })}
+                                <SubTasksChecklist issueId={bug.id} />
+
+                                <div className="border border-[#DFE1E6] rounded-[3px] overflow-hidden">
+                                    {/* Header */}
+                                    <div className="px-3 py-2.5 border-b border-[#DFE1E6] bg-[#FAFBFC] flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Clock className="w-4 h-4 text-[#5E6C84]" />
+                                            <span className="font-semibold text-[13px] text-[#172B4D]">Time Tracking</span>
+                                        </div>
+                                        {!logWorkOpen && (
+                                            <button onClick={() => setLogWorkOpen(true)}
+                                                className="text-[11px] bg-[#DEEBFF] hover:bg-[#0052CC] hover:text-white text-[#0052CC] px-2 py-0.5 rounded font-semibold transition-colors">
+                                                + Log Work
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <div className="p-3 space-y-3">
+                                        {/* Explanatory note */}
+                                        <div className="text-[11px] text-[#5E6C84] bg-[#F4F5F7] rounded px-2.5 py-2 leading-relaxed">
+                                            <span className="font-semibold text-[#172B4D]">How it works:</span> Set how long you <em>think</em> this will take (Estimate). As you work, click <em>Log Work</em> to record actual time spent.
+                                        </div>
+
+                                        {/* Estimate row */}
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex-1">
+                                                <div className="text-[11px] font-semibold text-[#5E6C84] mb-1 uppercase tracking-wide">Estimate (how long you think)</div>
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="number"
+                                                        value={bug.original_estimate === '' || bug.original_estimate == null ? '' : Number(bug.original_estimate)}
+                                                        onChange={(e) => setBug({ ...bug, original_estimate: e.target.value === '' ? '' : e.target.value })}
+                                                        onBlur={(e) => updateField('original_estimate', e.target.value)}
+                                                        className={`${selectClasses} px-2 py-1.5 outline-none w-20 text-[13px]`}
+                                                        placeholder="0"
+                                                        disabled={!canEditAll}
+                                                    />
+                                                    <span className="text-[12px] text-[#5E6C84]">minutes</span>
+                                                    {(bug.original_estimate && Number(bug.original_estimate) > 0) && (
+                                                        <span className="text-[12px] font-medium text-[#172B4D]">
+                                                            = {Math.floor(Number(bug.original_estimate) / 60) > 0 ? `${Math.floor(Number(bug.original_estimate) / 60)}h ` : ''}{Number(bug.original_estimate) % 60 > 0 ? `${Number(bug.original_estimate) % 60}m` : ''}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Visual progress */}
+                                        {(() => {
+                                            const estimate = Number(bug.original_estimate) || 0
+                                            const spent = Number(bug.time_spent) || 0
+                                            const remaining = Math.max(0, estimate - spent)
+                                            const pct = estimate > 0 ? Math.min(100, Math.round((spent / estimate) * 100)) : 0
+                                            const overBudget = spent > estimate && estimate > 0
+                                            const fmtMins = (m: number) => { if (!m) return '0m'; const h = Math.floor(m/60); const r = m%60; return h > 0 ? (r > 0 ? `${h}h ${r}m` : `${h}h`) : `${r}m` }
+                                            if (estimate === 0 && spent === 0) return null
+                                            return (
+                                                <div className="space-y-2 pt-1 border-t border-[#DFE1E6]">
+                                                    {/* Three stats */}
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        <div className="text-center bg-[#F4F5F7] rounded p-2">
+                                                            <div className="text-[10px] text-[#5E6C84] uppercase font-bold mb-0.5">Estimated</div>
+                                                            <div className="text-[14px] font-bold text-[#172B4D]">{fmtMins(estimate)}</div>
+                                                        </div>
+                                                        <div className={`text-center rounded p-2 ${spent > 0 ? 'bg-[#DEEBFF]' : 'bg-[#F4F5F7]'}`}>
+                                                            <div className="text-[10px] text-[#5E6C84] uppercase font-bold mb-0.5">Logged</div>
+                                                            <div className={`text-[14px] font-bold ${spent > 0 ? 'text-[#0052CC]' : 'text-[#B3BAC5]'}`}>{fmtMins(spent)}</div>
+                                                        </div>
+                                                        <div className={`text-center rounded p-2 ${overBudget ? 'bg-[#FFEBE6]' : remaining > 0 ? 'bg-[#E3FCEF]' : 'bg-[#E3FCEF]'}`}>
+                                                            <div className="text-[10px] text-[#5E6C84] uppercase font-bold mb-0.5">Remaining</div>
+                                                            <div className={`text-[14px] font-bold ${overBudget ? 'text-[#DE350B]' : 'text-[#00875A]'}`}>
+                                                                {overBudget ? `+${fmtMins(spent - estimate)} over` : fmtMins(remaining)}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {/* Progress bar */}
+                                                    <div>
+                                                        <div className="flex justify-between text-[10px] text-[#5E6C84] mb-1">
+                                                            <span>Progress</span>
+                                                            <span className={`font-bold ${overBudget ? 'text-[#DE350B]' : 'text-[#0052CC]'}`}>{pct}%</span>
+                                                        </div>
+                                                        <div className="h-3 bg-[#DFE1E6] rounded-full overflow-hidden">
+                                                            <div className={`h-full rounded-full transition-all ${overBudget ? 'bg-[#FF5630]' : pct > 75 ? 'bg-[#FF991F]' : 'bg-[#36B37E]'}`}
+                                                                style={{ width: `${pct}%` }} />
                                                         </div>
                                                     </div>
                                                 </div>
                                             )
-                                        })}
-                                        {activity.length === 0 && (
-                                            <div className="flex flex-col items-center justify-center p-8 bg-zinc-900/10 rounded-xl border border-dashed border-zinc-800/40">
-                                                <Activity className="h-6 w-6 text-zinc-800 mb-2 opacity-10" />
-                                                <p className="text-[10px] text-zinc-600 font-medium">No activity recorded</p>
+                                        })()}
+
+                                        {/* Log Work Panel */}
+                                        {logWorkOpen && (
+                                            <div className="border border-[#0052CC]/30 rounded bg-[#F4F5F7] p-3 space-y-3">
+                                                <div className="text-[12px] font-semibold text-[#172B4D] flex items-center gap-2">
+                                                    <Clock className="w-3.5 h-3.5 text-[#0052CC]" />
+                                                    Log Work — how much time did you spend?
+                                                </div>
+                                                {/* Quick presets */}
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {['30m', '1h', '2h', '4h', '8h'].map(preset => (
+                                                        <button key={preset} onClick={() => setLogWorkTime(preset)}
+                                                            className={`px-2 py-1 rounded text-[11px] font-semibold border transition-colors ${
+                                                                logWorkTime === preset
+                                                                    ? 'bg-[#0052CC] text-white border-[#0052CC]'
+                                                                    : 'bg-white text-[#42526E] border-[#DFE1E6] hover:border-[#0052CC] hover:text-[#0052CC]'
+                                                            }`}>{preset}</button>
+                                                    ))}
+                                                    <input
+                                                        type="text"
+                                                        placeholder="custom (e.g. 1h 30m)"
+                                                        value={logWorkTime}
+                                                        onChange={e => setLogWorkTime(e.target.value)}
+                                                        className="flex-1 min-w-[120px] border border-[#DFE1E6] rounded px-2 py-1 text-[11px] bg-white outline-none focus:border-[#0052CC]"
+                                                    />
+                                                </div>
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button onClick={() => { setLogWorkOpen(false); setLogWorkTime('') }}
+                                                        className="text-[12px] text-[#5E6C84] hover:text-[#172B4D] px-2 py-1">Cancel</button>
+                                                    <button onClick={handleLogWork}
+                                                        className="text-[12px] bg-[#0052CC] hover:bg-[#0047B3] text-white px-3 py-1.5 rounded font-semibold transition-colors">
+                                                        Save Work Log
+                                                    </button>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -491,6 +886,42 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
                     </>
                 )}
             </DialogContent>
+
+            {connectGithubOpen && project?.github_owner && project?.github_repo && (
+                <ConnectGithubModal
+                    projectId={projectId}
+                    githubOwner={project.github_owner}
+                    githubRepo={project.github_repo}
+                    onClose={() => setConnectGithubOpen(false)}
+                    onSuccess={() => {
+                        setConnectGithubOpen(false)
+                        // Trigger a re-render to pick up new token
+                        setProject({...project}) 
+                    }}
+                />
+            )}
+
+            {createBranchOpen && project?.github_owner && project?.github_repo && (
+                <CreateBranchModal
+                    projectId={projectId}
+                    issueId={bugId!}
+                    issueDisplayId={bug?.bug_display_id || ''}
+                    issueTitle={bug?.title || ''}
+                    isTask={false}
+                    githubToken={session?.provider_token || localStorage.getItem(`github_pat_${projectId}`) || ''}
+                    githubOwner={project.github_owner}
+                    githubRepo={project.github_repo}
+                    onClose={() => setCreateBranchOpen(false)}
+                    onSuccess={loadData}
+                />
+            )}
+
+            {createCommitOpen && (
+                <CreateCommitModal
+                    issueDisplayId={bug?.bug_display_id || ''}
+                    onClose={() => setCreateCommitOpen(false)}
+                />
+            )}
         </Dialog>
     )
 }

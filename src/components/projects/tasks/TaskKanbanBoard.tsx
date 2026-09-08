@@ -1,63 +1,126 @@
 import { useState, useEffect } from 'react'
 import { DragDropContext, Droppable, type DropResult } from '@hello-pangea/dnd'
-import { CheckSquare } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { type Task as TaskType, TaskCard } from './TaskCard'
+import { type Bug as BugType, BugCard } from '../BugCard'
 import { TaskDetailsModal } from './TaskDetailsModal'
+import { BugDetailsModal } from '../BugDetailsModal'
+import { Loader2 } from 'lucide-react'
 
-interface TaskKanbanBoardProps {
+interface ActiveSprintBoardProps {
     projectId: string
     refreshTrigger?: number
     userRole?: string
+    sprintId?: string | null
 }
 
-const COLUMNS = [
-    { id: 'todo', title: 'To Do', color: 'border-zinc-500' },
-    { id: 'in_progress', title: 'In Progress', color: 'border-blue-500' },
-    { id: 'in_review', title: 'In Review', color: 'border-yellow-500' },
-    { id: 'done', title: 'Done', color: 'border-green-500' },
-]
+type Issue = 
+    | { type: 'task', id: string, data: TaskType }
+    | { type: 'bug', id: string, data: BugType }
 
-export function TaskKanbanBoard({ projectId, refreshTrigger = 0, userRole }: TaskKanbanBoardProps) {
-    const [tasks, setTasks] = useState<TaskType[]>([])
+export function TaskKanbanBoard({ projectId, refreshTrigger = 0, userRole, sprintId }: ActiveSprintBoardProps) {
+    const [issues, setIssues] = useState<Issue[]>([])
+    const [columns, setColumns] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+    const [selectedBugId, setSelectedBugId] = useState<string | null>(null)
+    const [members, setMembers] = useState<any[]>([])
+    const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null)
 
     useEffect(() => {
-        loadTasks()
+        async function init() {
+            await loadColumns()
+            await loadIssues()
+        }
+        init()
 
-        // Subscription for real-time updates
+        // We only subscribe to tasks for now, complex multi-subscriptions can be added later
         const subscription = supabase
-            .channel(`public:tasks:project_id=eq.${projectId}`)
+            .channel(`public:issues:project_id=eq.${projectId}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `project_id=eq.${projectId}` }, _payload => {
-                loadTasks() // Reload full data to get assignees joined, etc. For production we can apply payload directly.
+                loadIssues()
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'bugs', filter: `project_id=eq.${projectId}` }, _payload => {
+                loadIssues()
             })
             .subscribe()
 
         return () => {
             supabase.removeChannel(subscription)
         }
-    }, [projectId, refreshTrigger])
+    }, [projectId, refreshTrigger, sprintId])
 
-    async function loadTasks() {
-        const { data, error } = await supabase
-            .from('tasks')
-            .select(`
-                *,
-                assignee:profiles!tasks_assigned_to_fkey (
-                    display_name,
-                    avatar_url
-                )
-            `)
-            .eq('project_id', projectId)
-            .order('created_at', { ascending: false }) // primary sort
-
-        if (!error && data) {
-            setTasks(data)
-        } else if (error) {
-            console.error('Error loading tasks:', error)
+    async function loadColumns() {
+        const { data } = await supabase.from('project_statuses').select('*').eq('project_id', projectId).order('position', { ascending: true })
+        if (data && data.length > 0) {
+            setColumns(data)
+        } else {
+            setColumns([
+                { name: 'todo' },
+                { name: 'in_progress' },
+                { name: 'in_review' },
+                { name: 'done' },
+            ])
         }
-        setLoading(false)
+
+        const { data: membersData } = await supabase
+            .from('project_members')
+            .select(`profiles (id, display_name, avatar_url)`)
+            .eq('project_id', projectId)
+
+        if (membersData) {
+            setMembers(membersData.map((m: any) => m.profiles))
+        }
+    }
+
+    async function loadIssues() {
+        if (sprintId === 'NO_ACTIVE_SPRINT') {
+            setIssues([])
+            setLoading(false)
+            return
+        }
+
+        let tasksQuery = supabase
+            .from('tasks')
+            .select(`*, assignee:profiles!tasks_assigned_to_fkey(display_name, avatar_url), epic:epics(name), resolved_at`)
+            .eq('project_id', projectId)
+
+        let bugsQuery = supabase
+            .from('bugs')
+            .select(`*, assignee:profiles!bugs_assigned_to_fkey(display_name, avatar_url), epic:epics(name), resolved_at`)
+            .eq('project_id', projectId)
+
+        if (sprintId !== undefined) {
+            if (sprintId === null) {
+                tasksQuery = tasksQuery.is('sprint_id', null)
+                // If migration hasn't run, this might fail for bugs. We catch it.
+                bugsQuery = bugsQuery.is('sprint_id', null)
+            } else {
+                tasksQuery = tasksQuery.eq('sprint_id', sprintId)
+                bugsQuery = bugsQuery.eq('sprint_id', sprintId)
+            }
+        }
+
+        try {
+            const [tasksRes, bugsRes] = await Promise.all([
+                tasksQuery.order('created_at', { ascending: false }),
+                bugsQuery.order('created_at', { ascending: false })
+            ])
+
+            const combined: Issue[] = []
+            if (tasksRes.data) {
+                combined.push(...tasksRes.data.map((t: any) => ({ type: 'task' as const, id: `task-${t.id}`, data: t })))
+            }
+            if (bugsRes.data) {
+                combined.push(...bugsRes.data.map((b: any) => ({ type: 'bug' as const, id: `bug-${b.id}`, data: b })))
+            }
+
+            setIssues(combined)
+        } catch (e) {
+            console.error("Failed to load issues", e)
+        } finally {
+            setLoading(false)
+        }
     }
 
     const onDragEnd = async (result: DropResult) => {
@@ -66,79 +129,129 @@ export function TaskKanbanBoard({ projectId, refreshTrigger = 0, userRole }: Tas
         if (!destination) return
         if (destination.droppableId === source.droppableId && destination.index === source.index) return
 
-        // RBAC: Only admin, pm, tester, and developer can move tasks
         if (!userRole || userRole === 'viewer') {
             console.warn('Viewers cannot update task status')
             return
         }
 
-        const draggedTask = tasks.find(b => b.id === draggableId)
-        if (!draggedTask) return
+        const draggedIssue = issues.find(i => i.id === draggableId)
+        if (!draggedIssue) return
 
         const newStatus = destination.droppableId
 
         // Optimistic update
-        const updatedTasks = [...tasks]
-        const sourceIndex = updatedTasks.findIndex(b => b.id === draggableId)
-        updatedTasks[sourceIndex].status = newStatus
-        setTasks(updatedTasks)
+        const updatedIssues = [...issues]
+        const sourceIndex = updatedIssues.findIndex(i => i.id === draggableId)
+        const issue = updatedIssues[sourceIndex]
+        if (issue.type === 'task') {
+            updatedIssues[sourceIndex] = { ...issue, data: { ...issue.data, status: newStatus } }
+        } else {
+            updatedIssues[sourceIndex] = { ...issue, data: { ...issue.data, status: newStatus } }
+        }
+        setIssues(updatedIssues)
 
-        // Persist
+        const isTask = draggableId.startsWith('task-')
+        const table = isTask ? 'tasks' : 'bugs'
+        const rawId = draggableId.replace(isTask ? 'task-' : 'bug-', '')
+
         const { error } = await supabase
-            .from('tasks')
+            .from(table)
             .update({ status: newStatus })
-            .eq('id', draggableId)
+            .eq('id', rawId)
 
         if (error) {
-            console.error('Error updating task status:', error)
-            // Revert on error
-            loadTasks()
+            console.error('Error updating issue status:', error)
+            loadIssues()
         }
     }
 
-    const getTasksByStatus = (status: string) => tasks.filter(b => b.status === status)
+    const getIssuesByStatus = (status: string) => issues.filter(i => {
+        if (assigneeFilter && i.data.assigned_to !== assigneeFilter) return false
+
+        // Handle custom mapping if bugs use different statuses like 'open', 'resolved'
+        if (i.type === 'bug') {
+            const bugStatus = i.data.status
+            if (status === 'todo' && bugStatus === 'open') return true
+            if (status === 'in_progress' && bugStatus === 'in_progress') return true
+            if (status === 'in_review' && bugStatus === 'in_review') return true
+            if (status === 'done' && (bugStatus === 'resolved' || bugStatus === 'closed')) return true
+        }
+        return i.data.status === status
+    })
 
     if (loading) {
         return (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 flex items-center justify-center">
-                <div className="animate-pulse flex flex-col items-center">
-                    <CheckSquare className="h-8 w-8 text-zinc-700 mb-4" />
-                    <div className="h-4 w-32 bg-zinc-800 rounded"></div>
-                </div>
+            <div className="flex-1 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-[#0052CC]" />
             </div>
         )
     }
 
     return (
-        <div className="flex-1 overflow-x-auto p-6 flex gap-6 bg-zinc-950 items-stretch min-h-0">
-            <DragDropContext onDragEnd={onDragEnd}>
-                {COLUMNS.map(column => {
-                    const columnTasks = getTasksByStatus(column.id)
+        <div className="flex-1 flex flex-col min-h-0 bg-white">
+            <div className="px-8 py-4 border-b border-[#DFE1E6] flex items-center gap-4 flex-shrink-0">
+                <span className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider">Quick Filters</span>
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={() => setAssigneeFilter(null)}
+                        className={`px-3 py-1.5 rounded-[3px] text-sm font-medium transition-colors ${!assigneeFilter ? 'bg-[#DEEBFF] text-[#0052CC]' : 'text-[#42526E] hover:bg-[#EBECF0]'}`}
+                    >
+                        All
+                    </button>
+                    <div className="w-px h-4 bg-[#DFE1E6] mx-2"></div>
+                    {members.map(member => (
+                        <button
+                            key={member.id}
+                            onClick={() => setAssigneeFilter(assigneeFilter === member.id ? null : member.id)}
+                            className={`p-1 rounded-full transition-all ${assigneeFilter === member.id ? 'ring-2 ring-[#0052CC] ring-offset-1' : 'hover:opacity-80'}`}
+                            title={member.display_name}
+                        >
+                            {member.avatar_url ? (
+                                <img src={member.avatar_url} className="w-7 h-7 rounded-full" alt={member.display_name} />
+                            ) : (
+                                <div className="w-7 h-7 rounded-full bg-[#0052CC] text-white flex items-center justify-center text-xs font-bold">
+                                    {member.display_name?.charAt(0)}
+                                </div>
+                            )}
+                        </button>
+                    ))}
+                </div>
+            </div>
+            
+            <div className="flex-1 overflow-x-auto p-8 flex gap-4 items-start min-h-0">
+                <DragDropContext onDragEnd={onDragEnd}>
+                    {columns.map(column => {
+                        const columnIssues = getIssuesByStatus(column.name)
+                        const title = column.name.split('_').map((w: string) => w.toUpperCase()).join(' ')
 
                     return (
-                        <div key={column.id} className="flex-shrink-0 w-80 flex flex-col bg-zinc-900 shadow-xl shadow-black/20 rounded-xl border border-zinc-800/80 max-h-full">
-                            <div className={`p-4 border-b-2 flex justify-between items-center rounded-t-xl bg-zinc-900/40 ${column.color}`}>
-                                <h3 className="font-semibold text-sm text-zinc-200">{column.title}</h3>
-                                <span className="text-xs font-medium bg-zinc-800/80 text-zinc-400 px-2.5 py-1 rounded-full border border-zinc-700/50">
-                                    {columnTasks.length}
-                                </span>
+                        <div key={column.name} className="flex-shrink-0 w-[280px] flex flex-col bg-[#F4F5F7] rounded-[3px] max-h-full">
+                            <div className="px-3 py-3 flex justify-between items-center cursor-pointer">
+                                <h3 className="font-semibold text-xs text-[#5E6C84] tracking-wider">{title} <span className="ml-1 text-[#5E6C84] font-normal">{columnIssues.length}</span></h3>
                             </div>
 
-                            <Droppable droppableId={column.id}>
+                            <Droppable droppableId={column.name}>
                                 {(provided, snapshot) => (
                                     <div
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
-                                        className={`flex-1 p-3 overflow-y-auto space-y-3 transition-colors min-h-[150px] ${snapshot.isDraggingOver ? 'bg-zinc-800/20' : ''
-                                            }`}
+                                        className={`flex-1 px-2 pb-2 overflow-y-auto space-y-2 min-h-[150px] ${snapshot.isDraggingOver ? 'bg-[#EBECF0]' : ''}`}
                                     >
-                                        {columnTasks.map((task, index) => (
-                                            <div key={task.id} className="mb-3">
-                                                <TaskCard
-                                                    task={task}
-                                                    index={index}
-                                                    onClick={(b) => setSelectedTaskId(b.id)}
-                                                />
+                                        {columnIssues.map((issue, index) => (
+                                            <div key={issue.id} className="mb-1">
+                                                {issue.type === 'task' ? (
+                                                    <TaskCard
+                                                        task={issue.data as TaskType}
+                                                        index={index}
+                                                        onClick={(t) => setSelectedTaskId(t.id)}
+                                                    />
+                                                ) : (
+                                                    <BugCard
+                                                        bug={issue.data as BugType}
+                                                        index={index}
+                                                        onClick={(b) => setSelectedBugId(b.id)}
+                                                    />
+                                                )}
                                             </div>
                                         ))}
                                         {provided.placeholder}
@@ -149,13 +262,23 @@ export function TaskKanbanBoard({ projectId, refreshTrigger = 0, userRole }: Tas
                     )
                 })}
             </DragDropContext>
+            
             <TaskDetailsModal
                 taskId={selectedTaskId}
                 projectId={projectId}
                 userRole={userRole}
                 onClose={() => setSelectedTaskId(null)}
-                onUpdate={loadTasks}
+                onUpdate={loadIssues}
             />
+
+                <BugDetailsModal
+                    bugId={selectedBugId}
+                    projectId={projectId}
+                    userRole={userRole}
+                    onClose={() => setSelectedBugId(null)}
+                    onUpdate={loadIssues}
+                />
+            </div>
         </div>
     )
 }

@@ -1,15 +1,9 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState, useCallback } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { CreateProjectModal } from '../components/projects/CreateProjectModal'
-import { Github, FolderGit2 } from 'lucide-react'
-
-interface Profile {
-    display_name: string
-    role: string
-    github_username: string | null
-}
+import { FolderGit2, Briefcase, CheckCircle2, AlertCircle } from 'lucide-react'
 
 interface Project {
     id: string
@@ -18,125 +12,253 @@ interface Project {
     description: string
     github_repo: string
     github_owner: string
-    github_details: any
     updated_at: string
+}
+
+interface AssignedItem {
+    id: string;
+    display_id: string;
+    title: string;
+    type: 'bug' | 'task';
+    project_code: string;
+    project_id: string;
+    status: string;
+    updated_at: string;
 }
 
 export function Dashboard() {
     const { user } = useAuth()
-    const [profile, setProfile] = useState<Profile | null>(null)
+    const navigate = useNavigate()
     const [projects, setProjects] = useState<Project[]>([])
+    const [assignedItems, setAssignedItems] = useState<AssignedItem[]>([])
     const [loading, setLoading] = useState(true)
+    const [activeTab, setActiveTab] = useState<'recent' | 'assigned'>('recent')
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         if (!user) return
 
         // Load profile
-        const { data: profileData } = await supabase
-            .from('profiles')
-            .select('display_name, role, github_username')
-            .eq('id', user.id)
-            .single()
-
-        if (profileData) setProfile(profileData)
-
         // Load projects this user is a member of
-        const { data: projectsData, error } = await supabase
+        const { data: projectsData, error: projErr } = await supabase
             .from('projects')
             .select('*, project_members!inner(project_id)')
             .eq('project_members.user_id', user.id)
             .order('updated_at', { ascending: false })
 
-        if (projectsData && !error) {
+        if (projectsData && !projErr) {
             setProjects(projectsData)
         }
+
+        // Load Assigned Bugs
+        const { data: bugs } = await supabase
+            .from('bugs')
+            .select('id, bug_display_id, title, status, updated_at, projects(id, project_code)')
+            .eq('assigned_to', user.id)
+            .neq('status', 'resolved')
+            .neq('status', 'closed')
+            .order('updated_at', { ascending: false })
+            .limit(10)
+            
+        // Load Assigned Tasks
+        const { data: tasks } = await supabase
+            .from('tasks')
+            .select('id, task_display_id, title, status, updated_at, projects(id, project_code)')
+            .eq('assigned_to', user.id)
+            .neq('status', 'done')
+            .order('updated_at', { ascending: false })
+            .limit(10)
+
+        const combined: AssignedItem[] = []
+        if (bugs) {
+            bugs.forEach((b: any) => combined.push({
+                id: b.id,
+                display_id: b.bug_display_id,
+                title: b.title,
+                type: 'bug',
+                project_code: b.projects?.project_code || 'UNK',
+                project_id: b.projects?.id,
+                status: b.status,
+                updated_at: b.updated_at
+            }))
+        }
+        if (tasks) {
+            tasks.forEach((t: any) => combined.push({
+                id: t.id,
+                display_id: t.task_display_id,
+                title: t.title,
+                type: 'task',
+                project_code: t.projects?.project_code || 'UNK',
+                project_id: t.projects?.id,
+                status: t.status,
+                updated_at: t.updated_at
+            }))
+        }
+
+        // Sort combined by updated_at
+        combined.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+        setAssignedItems(combined)
+
         setLoading(false)
-    }
+    }, [user])
 
     useEffect(() => {
         loadData()
-    }, [user])
+    }, [loadData])
+
+
+    if (loading) {
+        return (
+            <div className="flex-1 p-8 text-[#172B4D] animate-pulse">
+                <div className="h-8 bg-[#EBECF0] w-48 rounded mb-6"></div>
+                <div className="flex gap-4 mb-6">
+                    <div className="h-6 bg-[#EBECF0] w-24 rounded"></div>
+                    <div className="h-6 bg-[#EBECF0] w-24 rounded"></div>
+                </div>
+                <div className="space-y-4">
+                    <div className="h-16 bg-[#EBECF0] rounded"></div>
+                    <div className="h-16 bg-[#EBECF0] rounded"></div>
+                    <div className="h-16 bg-[#EBECF0] rounded"></div>
+                </div>
+            </div>
+        )
+    }
+
+    const getStatusBadge = (status: string) => {
+        const normalizedStatus = status.toLowerCase();
+        let bg = 'bg-[#DFE1E6]';
+        let text = 'text-[#42526E]';
+
+        if (normalizedStatus.includes('progress')) {
+            bg = 'bg-[#E1ECFA]';
+            text = 'text-[#0052CC]';
+        } else if (normalizedStatus.includes('resolved') || normalizedStatus.includes('done') || normalizedStatus.includes('closed')) {
+            bg = 'bg-[#E3FCEF]';
+            text = 'text-[#006644]';
+        }
+
+        return (
+            <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider ${bg} ${text}`}>
+                {status.replace('_', ' ')}
+            </span>
+        )
+    }
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-bold tracking-tight text-white">Project Dashboard</h1>
+        <div className="flex-1 max-w-5xl mx-auto w-full px-6 py-10 text-[#172B4D]">
+            <div className="flex items-center justify-between mb-8">
+                <h1 className="text-[24px] font-medium tracking-tight text-[#172B4D]">Your work</h1>
                 <CreateProjectModal onSuccess={loadData} />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-sm">
-                    <h3 className="text-zinc-400 text-sm font-medium mb-2">Welcome back</h3>
-                    <p className="text-2xl font-semibold text-white">
-                        {profile?.display_name || user?.email}
-                    </p>
-                    <div className="mt-4 flex gap-2">
-                        <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-400 ring-1 ring-inset ring-blue-500/20">
-                            {profile?.role || 'user'}
-                        </span>
-                    </div>
-                </div>
-
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-sm">
-                    <h3 className="text-zinc-400 text-sm font-medium mb-2">Active Projects</h3>
-                    <p className="text-3xl font-semibold text-white">{projects.length}</p>
-                </div>
-
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-sm">
-                    <h3 className="text-zinc-400 text-sm font-medium mb-2">Open Bugs</h3>
-                    <p className="text-3xl font-semibold text-white">0</p>
-                </div>
+            {/* Tabs */}
+            <div className="flex items-center gap-6 border-b border-[#DFE1E6] mb-6">
+                <button 
+                    onClick={() => setActiveTab('recent')}
+                    className={`pb-3 font-medium text-sm transition-colors relative ${activeTab === 'recent' ? 'text-[#0052CC]' : 'text-[#5E6C84] hover:text-[#172B4D]'}`}
+                >
+                    Recent projects
+                    {activeTab === 'recent' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#0052CC] rounded-t"></div>}
+                </button>
+                <button 
+                    onClick={() => setActiveTab('assigned')}
+                    className={`pb-3 font-medium text-sm transition-colors relative ${activeTab === 'assigned' ? 'text-[#0052CC]' : 'text-[#5E6C84] hover:text-[#172B4D]'}`}
+                >
+                    Assigned to me <span className="ml-1.5 bg-[#EBECF0] text-[#42526E] px-1.5 py-0.5 rounded-full text-xs">{assignedItems.length}</span>
+                    {activeTab === 'assigned' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#0052CC] rounded-t"></div>}
+                </button>
             </div>
 
-            <div className="mt-8">
-                <h2 className="text-xl font-semibold text-white mb-4">Your Projects</h2>
-                {loading ? (
-                    <div className="animate-pulse space-y-4">
-                        <div className="h-32 bg-zinc-900 rounded-xl border border-zinc-800"></div>
-                        <div className="h-32 bg-zinc-900 rounded-xl border border-zinc-800"></div>
-                    </div>
-                ) : projects.length === 0 ? (
-                    <div className="border border-zinc-800 bg-zinc-900/50 rounded-xl min-h-[300px] flex items-center justify-center">
-                        <div className="text-center text-zinc-500">
-                            <FolderGit2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                            <p>No projects found.</p>
-                            <p className="text-sm mt-1">Create a new project to get started.</p>
+            {/* Tab Content */}
+            {activeTab === 'recent' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {projects.length === 0 ? (
+                        <div className="col-span-full py-16 flex flex-col items-center justify-center text-center border-2 border-dashed border-[#DFE1E6] rounded-lg">
+                            <FolderGit2 className="w-12 h-12 text-[#N30] mb-4 text-[#A5ADBA]" />
+                            <h3 className="text-lg font-medium text-[#172B4D] mb-2">No projects yet</h3>
+                            <p className="text-sm text-[#5E6C84] mb-6">You don't have any recent projects.</p>
                         </div>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {projects.map((project) => (
+                    ) : (
+                        projects.map((project) => (
                             <Link
                                 key={project.id}
                                 to={`/projects/${project.id}`}
-                                className="group block h-full bg-zinc-900 border border-zinc-800 rounded-xl p-5 hover:border-zinc-700 transition-colors"
+                                className="group bg-white border border-[#DFE1E6] rounded p-4 hover:shadow-[0_1px_4px_rgba(9,30,66,0.15)] transition-all block"
                             >
-                                <div className="flex items-start justify-between mb-2">
-                                    <h3 className="text-lg font-semibold text-white group-hover:text-blue-400 transition-colors">
-                                        {project.name}
-                                    </h3>
-                                    <span className="text-xs font-mono bg-zinc-800 text-zinc-300 px-2 py-1 rounded">
-                                        {project.project_code}
-                                    </span>
+                                <div className="flex items-start gap-3">
+                                    <div className="w-10 h-10 rounded bg-[#EAE6FF] text-[#403294] flex items-center justify-center font-bold text-sm flex-shrink-0">
+                                        {project.project_code.substring(0,2)}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <h3 className="text-[16px] font-medium text-[#172B4D] mb-1 group-hover:text-[#0052CC] transition-colors truncate">
+                                            {project.name}
+                                        </h3>
+                                        <p className="text-xs text-[#5E6C84]">Software project</p>
+                                    </div>
                                 </div>
-                                <p className="text-zinc-400 text-sm mb-4 line-clamp-2 min-h-[40px]">
-                                    {project.github_details?.description || 'No description provided.'}
-                                </p>
-                                <div className="flex items-center gap-4 text-xs text-zinc-500 mt-auto pt-4 border-t border-zinc-800/50">
-                                    <span className="flex items-center gap-1">
-                                        <Github className="h-3 w-3" />
-                                        {project.github_owner}/{project.github_repo}
-                                    </span>
-                                    <span className="flex items-center gap-1 ml-auto">
-                                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                        Active
-                                    </span>
+                                <div className="mt-4 pt-3 border-t border-[#DFE1E6] flex items-center gap-4">
+                                    <div className="flex items-center gap-1.5 text-xs text-[#5E6C84]">
+                                        <Briefcase className="w-3.5 h-3.5" />
+                                        {project.project_code}
+                                    </div>
                                 </div>
                             </Link>
-                        ))}
-                    </div>
-                )}
-            </div>
+                        ))
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'assigned' && (
+                <div className="bg-white border border-[#DFE1E6] rounded">
+                    {assignedItems.length === 0 ? (
+                        <div className="py-16 flex flex-col items-center justify-center text-center">
+                            <CheckCircle2 className="w-12 h-12 text-[#36B37E] mb-4" />
+                            <h3 className="text-lg font-medium text-[#172B4D] mb-2">You're all caught up</h3>
+                            <p className="text-sm text-[#5E6C84]">There are no issues assigned to you.</p>
+                        </div>
+                    ) : (
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-[#DFE1E6]">
+                                    <th className="py-2.5 px-4 text-xs font-bold text-[#5E6C84] uppercase tracking-wider w-8">T</th>
+                                    <th className="py-2.5 px-4 text-xs font-bold text-[#5E6C84] uppercase tracking-wider w-24">Key</th>
+                                    <th className="py-2.5 px-4 text-xs font-bold text-[#5E6C84] uppercase tracking-wider">Summary</th>
+                                    <th className="py-2.5 px-4 text-xs font-bold text-[#5E6C84] uppercase tracking-wider w-32">Status</th>
+                                    <th className="py-2.5 px-4 text-xs font-bold text-[#5E6C84] uppercase tracking-wider w-32 text-right">Updated</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {assignedItems.map(item => (
+                                    <tr key={item.id} className="border-b border-[#DFE1E6] last:border-0 hover:bg-[#FAFBFC] transition-colors group cursor-pointer" onClick={() => navigate(`/projects/${item.project_id}/${item.type === 'bug' ? `bugs/${item.id}` : 'board'}`)}>
+                                        <td className="py-2.5 px-4">
+                                            {item.type === 'bug' ? (
+                                                <div className="w-5 h-5 rounded bg-[#FFEBE6] text-[#DE350B] flex items-center justify-center" title="Bug">
+                                                    <AlertCircle className="w-3.5 h-3.5" />
+                                                </div>
+                                            ) : (
+                                                <div className="w-5 h-5 rounded bg-[#E6FCFF] text-[#00B8D9] flex items-center justify-center" title="Task">
+                                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td className="py-2.5 px-4 text-sm font-medium text-[#5E6C84] group-hover:text-[#0052CC]">
+                                            {item.display_id}
+                                        </td>
+                                        <td className="py-2.5 px-4 text-sm text-[#172B4D] font-medium">
+                                            {item.title}
+                                        </td>
+                                        <td className="py-2.5 px-4">
+                                            {getStatusBadge(item.status)}
+                                        </td>
+                                        <td className="py-2.5 px-4 text-xs text-[#5E6C84] text-right">
+                                            {new Date(item.updated_at).toLocaleDateString()}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            )}
         </div>
     )
 }

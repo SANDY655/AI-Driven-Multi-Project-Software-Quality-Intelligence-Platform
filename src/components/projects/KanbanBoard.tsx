@@ -1,37 +1,37 @@
 import { useState, useEffect } from 'react'
 import { DragDropContext, Droppable, type DropResult } from '@hello-pangea/dnd'
-import { Bug } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { type Bug as BugType, BugCard } from './BugCard'
-import { BugDetailsModal } from './BugDetailsModal'
+import { useNavigate } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
 
 interface KanbanBoardProps {
     projectId: string
     refreshTrigger?: number
     userRole?: string
+    assigneeFilter?: string | null
 }
 
 const COLUMNS = [
-    { id: 'open', title: 'Open', color: 'border-zinc-500' },
-    { id: 'in_progress', title: 'In Progress', color: 'border-blue-500' },
-    { id: 'in_review', title: 'In Review', color: 'border-yellow-500' },
-    { id: 'resolved', title: 'Resolved', color: 'border-green-500' },
-    { id: 'closed', title: 'Closed', color: 'border-purple-500' },
+    { id: 'open', title: 'TO DO' },
+    { id: 'in_progress', title: 'IN PROGRESS' },
+    { id: 'in_review', title: 'IN REVIEW' },
+    { id: 'resolved', title: 'RESOLVED' },
+    { id: 'closed', title: 'DONE' },
 ]
 
-export function KanbanBoard({ projectId, refreshTrigger = 0, userRole }: KanbanBoardProps) {
+export function KanbanBoard({ projectId, refreshTrigger = 0, userRole, assigneeFilter }: KanbanBoardProps) {
     const [bugs, setBugs] = useState<BugType[]>([])
     const [loading, setLoading] = useState(true)
-    const [selectedBugId, setSelectedBugId] = useState<string | null>(null)
+    const navigate = useNavigate()
 
     useEffect(() => {
         loadBugs()
 
-        // Subscription for real-time updates
         const subscription = supabase
             .channel(`public:bugs:project_id=eq.${projectId}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'bugs', filter: `project_id=eq.${projectId}` }, _payload => {
-                loadBugs() // Reload full data to get assignees joined, etc. For production we can apply payload directly.
+                loadBugs()
             })
             .subscribe()
 
@@ -51,13 +51,11 @@ export function KanbanBoard({ projectId, refreshTrigger = 0, userRole }: KanbanB
                 )
             `)
             .eq('project_id', projectId)
-            .order('priority', { ascending: true }) // primary sort
-            .order('created_at', { ascending: false }) // secondary sort
+            .order('priority', { ascending: true }) 
+            .order('created_at', { ascending: false })
 
         if (!error && data) {
             setBugs(data)
-        } else if (error) {
-            console.error('Error loading bugs:', error)
         }
         setLoading(false)
     }
@@ -68,7 +66,6 @@ export function KanbanBoard({ projectId, refreshTrigger = 0, userRole }: KanbanB
         if (!destination) return
         if (destination.droppableId === source.droppableId && destination.index === source.index) return
 
-        // RBAC: Only admin, pm, tester, and developer can move bugs
         if (!userRole || userRole === 'viewer') {
             console.warn('Viewers cannot update bug status')
             return
@@ -85,7 +82,6 @@ export function KanbanBoard({ projectId, refreshTrigger = 0, userRole }: KanbanB
         updatedBugs[sourceIndex].status = newStatus
         setBugs(updatedBugs)
 
-        // Persist
         const { error } = await supabase
             .from('bugs')
             .update({ status: newStatus })
@@ -93,37 +89,34 @@ export function KanbanBoard({ projectId, refreshTrigger = 0, userRole }: KanbanB
 
         if (error) {
             console.error('Error updating bug status:', error)
-            // Revert on error
             loadBugs()
         }
     }
 
-    const getBugsByStatus = (status: string) => bugs.filter(b => b.status === status)
+    const getBugsByStatus = (status: string) => {
+        const statusBugs = bugs.filter(b => b.status === status)
+        if (!assigneeFilter) return statusBugs
+        return statusBugs.filter(b => b.assigned_to === assigneeFilter)
+    }
 
     if (loading) {
         return (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 flex items-center justify-center">
-                <div className="animate-pulse flex flex-col items-center">
-                    <Bug className="h-8 w-8 text-zinc-700 mb-4" />
-                    <div className="h-4 w-32 bg-zinc-800 rounded"></div>
-                </div>
+            <div className="flex-1 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-[#0052CC]" />
             </div>
         )
     }
 
     return (
-        <div className="flex-1 overflow-x-auto p-6 flex gap-6 bg-zinc-950 items-stretch min-h-0">
+        <div className="flex-1 overflow-x-auto p-8 flex gap-4 bg-white items-start min-h-0">
             <DragDropContext onDragEnd={onDragEnd}>
                 {COLUMNS.map(column => {
                     const columnBugs = getBugsByStatus(column.id)
 
                     return (
-                        <div key={column.id} className="flex-shrink-0 w-80 flex flex-col bg-zinc-900 shadow-xl shadow-black/20 rounded-xl border border-zinc-800/80 max-h-full">
-                            <div className={`p-4 border-b-2 flex justify-between items-center rounded-t-xl bg-zinc-900/40 ${column.color}`}>
-                                <h3 className="font-semibold text-sm text-zinc-200">{column.title}</h3>
-                                <span className="text-xs font-medium bg-zinc-800/80 text-zinc-400 px-2.5 py-1 rounded-full border border-zinc-700/50">
-                                    {columnBugs.length}
-                                </span>
+                        <div key={column.id} className="flex-shrink-0 w-[280px] flex flex-col bg-[#F4F5F7] rounded-[3px] max-h-full">
+                            <div className="px-3 py-3 flex justify-between items-center cursor-pointer">
+                                <h3 className="font-semibold text-xs text-[#5E6C84] tracking-wider">{column.title} <span className="ml-1 text-[#5E6C84] font-normal">{columnBugs.length}</span></h3>
                             </div>
 
                             <Droppable droppableId={column.id}>
@@ -131,17 +124,15 @@ export function KanbanBoard({ projectId, refreshTrigger = 0, userRole }: KanbanB
                                     <div
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
-                                        className={`flex-1 p-3 overflow-y-auto space-y-3 transition-colors min-h-[150px] ${snapshot.isDraggingOver ? 'bg-zinc-800/20' : ''
-                                            }`}
+                                        className={`flex-1 px-2 pb-2 overflow-y-auto space-y-2 min-h-[150px] ${snapshot.isDraggingOver ? 'bg-[#EBECF0]' : ''}`}
                                     >
                                         {columnBugs.map((bug, index) => (
-                                            <div key={bug.id} className="mb-3">
-                                                <BugCard
-                                                    bug={bug}
-                                                    index={index}
-                                                    onClick={(b) => setSelectedBugId(b.id)}
-                                                />
-                                            </div>
+                                            <BugCard
+                                                key={bug.id}
+                                                bug={bug}
+                                                index={index}
+                                                onClick={(b) => navigate(`/projects/${projectId}/bugs/${b.id}`)}
+                                            />
                                         ))}
                                         {provided.placeholder}
                                     </div>
@@ -151,13 +142,6 @@ export function KanbanBoard({ projectId, refreshTrigger = 0, userRole }: KanbanB
                     )
                 })}
             </DragDropContext>
-            <BugDetailsModal
-                bugId={selectedBugId}
-                projectId={projectId}
-                userRole={userRole}
-                onClose={() => setSelectedBugId(null)}
-                onUpdate={loadBugs}
-            />
         </div>
     )
 }

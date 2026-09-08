@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Bug } from 'lucide-react'
+import { Github, Bug } from 'lucide-react'
 
 export function Register() {
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
-    const [displayName, setDisplayName] = useState('')
+    const [fullName, setFullName] = useState('')
     const [error, setError] = useState<string | null>(null)
     const [loading, setLoading] = useState(false)
     const navigate = useNavigate()
@@ -16,100 +16,116 @@ export function Register() {
         setLoading(true)
         setError(null)
 
-        // Auto profile creation happens via DB trigger we set up.
-        // We pass display_name in user_meta_data so the trigger can grab it.
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
             email,
             password,
             options: {
                 data: {
-                    full_name: displayName,
-                },
-            },
+                    full_name: fullName,
+                }
+            }
         })
 
         if (error) {
             setError(error.message)
-        } else {
-            // Sometimes SignUp requires email confirmation. For simplicity, assume auto-login if no confirmation needed.
+        } else if (data.user) {
             navigate('/')
         }
         setLoading(false)
     }
 
+    const handleGithubLogin = async () => {
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'github',
+            options: {
+                scopes: 'repo',
+            },
+        })
+        if (error) setError(error.message)
+    }
+
     return (
-        <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-50 py-12 px-4 sm:px-6 lg:px-8">
-            <div className="max-w-md w-full space-y-8">
-                <div className="flex flex-col items-center">
-                    <Bug className="h-12 w-12 text-blue-500 mb-4" />
-                    <h2 className="text-center text-3xl font-extrabold tracking-tight">
-                        Create an account
-                    </h2>
+        <div className="min-h-screen bg-[#FAFBFC] flex flex-col items-center justify-center p-4">
+            
+            <div className="w-full max-w-[400px] bg-white rounded shadow-[0_4px_8px_rgba(9,30,66,0.25)] border border-[#DFE1E6] p-8">
+                
+                <div className="flex flex-col items-center mb-8">
+                    <div className="w-10 h-10 bg-[#0052CC] rounded flex items-center justify-center mb-4 shadow-sm">
+                        <Bug className="w-6 h-6 text-white" />
+                    </div>
+                    <h2 className="text-[#172B4D] text-[18px] font-semibold text-center">Sign up for an account</h2>
                 </div>
-                <form className="mt-8 space-y-6 bg-zinc-900 border border-zinc-800 p-8 rounded-xl shadow-2xl" onSubmit={handleRegister}>
+
+                <form onSubmit={handleRegister} className="space-y-4">
                     {error && (
-                        <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded-md text-sm">
+                        <div className="bg-[#FFEBE6] border border-[#DE350B] text-[#DE350B] px-3 py-2 rounded text-sm font-medium">
                             {error}
                         </div>
                     )}
-                    <div className="space-y-4">
-                        <div>
-                            <label htmlFor="displayName" className="sr-only">Display Name</label>
-                            <input
-                                id="displayName"
-                                name="displayName"
-                                type="text"
-                                required
-                                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-zinc-700 bg-zinc-800 placeholder-zinc-400 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                                placeholder="Full Name"
-                                value={displayName}
-                                onChange={(e) => setDisplayName(e.target.value)}
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="email" className="sr-only">Email address</label>
-                            <input
-                                id="email"
-                                name="email"
-                                type="email"
-                                required
-                                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-zinc-700 bg-zinc-800 placeholder-zinc-400 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                                placeholder="Email address"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="password" className="sr-only">Password</label>
-                            <input
-                                id="password"
-                                name="password"
-                                type="password"
-                                required
-                                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-zinc-700 bg-zinc-800 placeholder-zinc-400 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                                placeholder="Password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                            />
-                        </div>
+
+                    <div>
+                        <input
+                            id="fullName"
+                            type="text"
+                            required
+                            className="w-full px-3 py-2 bg-[#FAFBFC] border border-[#DFE1E6] rounded text-[#172B4D] placeholder-[#A5ADBA] focus:outline-none focus:border-[#4C9AFF] focus:bg-white transition-colors text-sm"
+                            placeholder="Enter full name"
+                            value={fullName}
+                            onChange={(e) => setFullName(e.target.value)}
+                        />
                     </div>
 
                     <div>
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-                        >
-                            {loading ? 'Signing up...' : 'Sign up'}
-                        </button>
+                        <input
+                            id="email"
+                            type="email"
+                            required
+                            className="w-full px-3 py-2 bg-[#FAFBFC] border border-[#DFE1E6] rounded text-[#172B4D] placeholder-[#A5ADBA] focus:outline-none focus:border-[#4C9AFF] focus:bg-white transition-colors text-sm"
+                            placeholder="Enter email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                        />
                     </div>
 
-                    <div className="text-sm text-center">
-                        <Link to="/login" className="font-medium text-blue-500 hover:text-blue-400">
-                            Already have an account? Sign in
-                        </Link>
+                    <div>
+                        <input
+                            id="password"
+                            type="password"
+                            required
+                            className="w-full px-3 py-2 bg-[#FAFBFC] border border-[#DFE1E6] rounded text-[#172B4D] placeholder-[#A5ADBA] focus:outline-none focus:border-[#4C9AFF] focus:bg-white transition-colors text-sm"
+                            placeholder="Create password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                        />
                     </div>
+
+                    <button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full py-2 bg-[#0052CC] hover:bg-[#0047B3] text-white font-medium rounded text-sm transition-colors focus:outline-none disabled:opacity-70 mt-4"
+                    >
+                        {loading ? 'Creating account...' : 'Sign up'}
+                    </button>
                 </form>
+
+                <div className="my-6 text-center text-sm text-[#5E6C84]">OR</div>
+
+                <button 
+                    type="button" 
+                    onClick={handleGithubLogin} 
+                    className="w-full py-2 flex items-center justify-center bg-white border border-[#DFE1E6] hover:bg-[#FAFBFC] rounded text-[#172B4D] font-medium transition-colors text-sm gap-2"
+                >
+                    <Github className="w-4 h-4 text-[#172B4D]" />
+                    Continue with GitHub
+                </button>
+
+                <div className="mt-6 pt-6 border-t border-[#DFE1E6] text-center text-sm">
+                    <Link to="/login" className="text-[#0052CC] hover:underline font-medium">Already have an account? Log in</Link>
+                </div>
+
+            </div>
+            <div className="mt-8 text-center">
+                <span className="text-[#5E6C84] text-[24px] font-bold tracking-widest opacity-20">BugTracker</span>
             </div>
         </div>
     )

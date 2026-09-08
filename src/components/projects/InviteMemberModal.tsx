@@ -4,12 +4,10 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
 import { UserPlus, Loader2 } from 'lucide-react'
 
 interface InviteMemberModalProps {
@@ -31,7 +29,6 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
         setError(null)
 
         try {
-            // RBAC: Verify user permission
             const { data: userRole } = await supabase
                 .from('project_members')
                 .select('project_role')
@@ -42,7 +39,6 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
             if (!userRole || !['admin', 'pm'].includes(userRole.project_role)) {
                 throw new Error('You do not have permission to invite members.')
             }
-            // 1. Find the user by their email in the profiles table
             const { data: profile, error: profileError } = await supabase
                 .from('profiles')
                 .select('id')
@@ -53,7 +49,6 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
                 throw new Error('User not found. They must sign up for the app first.')
             }
 
-            // 2. Insert into project_members
             const { error: inviteError } = await supabase
                 .from('project_members')
                 .insert({
@@ -63,13 +58,37 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
                 })
 
             if (inviteError) {
-                if (inviteError.code === '23505') { // Unique violation
+                if (inviteError.code === '23505') {
                     throw new Error('This user is already a member of this project.')
                 }
                 throw new Error(inviteError.message)
             }
 
-            // Success
+            const { data: project } = await supabase
+                .from('projects')
+                .select('name')
+                .eq('id', projectId)
+                .single()
+
+            const { data: inviterProfile } = await supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('id', user?.id)
+                .single()
+
+            try {
+                await supabase.functions.invoke('send-invite-email', {
+                    body: {
+                        email: email.trim().toLowerCase(),
+                        projectName: project?.name || 'your new project',
+                        role,
+                        inviterName: inviterProfile?.full_name || user?.email || 'A team member'
+                    }
+                })
+            } catch (emailErr) {
+                console.error('Failed to send invite email:', emailErr)
+            }
+
             setOpen(false)
             setEmail('')
             setRole('developer')
@@ -81,69 +100,73 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
         }
     }
 
+    const inputClasses = "w-full rounded-[3px] border border-[#DFE1E6] bg-[#FAFBFC] hover:bg-[#EBECF0] focus:bg-white focus:border-[#4C9AFF] focus:ring-1 focus:ring-[#4C9AFF] transition-colors text-sm px-3 py-2 text-[#172B4D] placeholder:text-[#A5ADBA] focus-visible:ring-1 focus-visible:ring-offset-0 focus-visible:ring-[#4C9AFF]"
+
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button size="sm" variant="outline" className="gap-2 text-zinc-300 border-zinc-700 bg-zinc-900 hover:bg-zinc-800 hover:text-white">
-                    <UserPlus className="h-4 w-4" />
-                    Invite
-                </Button>
+                <button className="bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#42526E] border border-[#DFE1E6] px-3 py-1.5 rounded-[3px] font-medium text-sm transition-colors flex items-center gap-2">
+                    <UserPlus className="h-4 w-4" /> Add people
+                </button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-zinc-800 text-zinc-100">
-                <DialogHeader>
-                    <DialogTitle>Invite a Team Member</DialogTitle>
-                    <DialogDescription className="text-zinc-400">
-                        Add an existing user to this project. They must have an account.
-                    </DialogDescription>
+            <DialogContent className="sm:max-w-[480px] p-0 bg-white border-0 shadow-[0_8px_16px_-4px_rgba(9,30,66,0.25),0_0_1px_rgba(9,30,66,0.31)] rounded-[3px] gap-0 overflow-hidden flex flex-col">
+                <DialogHeader className="px-6 py-5 border-b border-[#DFE1E6] flex flex-row items-center justify-between flex-shrink-0">
+                    <DialogTitle className="text-[20px] font-medium text-[#172B4D]">Add people</DialogTitle>
                 </DialogHeader>
 
-                <form onSubmit={handleInvite} className="space-y-4 py-4">
+                <form id="invite-member-form" onSubmit={handleInvite} className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">User Email Address</label>
+                        <label className="block text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider">Email Address<span className="text-[#DE350B] ml-1">*</span></label>
                         <input
                             type="email"
                             required
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="colleague@example.com"
-                            className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            placeholder="e.g., maria@company.com"
+                            className={inputClasses}
                         />
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Project Role</label>
+                        <label className="block text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider">Role</label>
                         <select
                             value={role}
                             onChange={(e) => setRole(e.target.value)}
-                            className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className={inputClasses}
                         >
-                            <option value="viewer">Viewer (Read-only)</option>
-                            <option value="tester">Tester (Create Bugs)</option>
-                            <option value="developer">Developer (Fix Bugs)</option>
+                            <option value="viewer">Viewer</option>
+                            <option value="tester">Tester</option>
+                            <option value="developer">Developer</option>
                             <option value="pm">Project Manager</option>
                             <option value="admin">Admin</option>
                         </select>
                     </div>
 
                     {error && (
-                        <div className="p-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                        <div className="p-3 bg-[#FFEBE6] border border-[#DE350B] text-[#DE350B] text-sm rounded-[3px]">
                             {error}
                         </div>
                     )}
-
-                    <div className="flex justify-end pt-4">
-                        <Button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white w-full">
-                            {loading ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Sending Invite...
-                                </>
-                            ) : (
-                                'Add Member'
-                            )}
-                        </Button>
-                    </div>
                 </form>
+
+                <div className="px-6 py-4 border-t border-[#DFE1E6] bg-[#FAFBFC] flex justify-end gap-2 flex-shrink-0">
+                    <button
+                        type="button"
+                        onClick={() => setOpen(false)}
+                        className="px-4 py-2 text-[#42526E] hover:bg-[#EBECF0] rounded-[3px] font-medium text-sm transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        form="invite-member-form"
+                        disabled={loading}
+                        className="px-4 py-2 bg-[#0052CC] hover:bg-[#0047B3] text-white rounded-[3px] font-medium text-sm transition-colors flex items-center gap-2"
+                    >
+                        {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Add
+                    </button>
+                </div>
             </DialogContent>
         </Dialog>
     )
