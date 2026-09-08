@@ -10,10 +10,17 @@ import {
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { X, UserPlus, Loader2, GitBranch, GitCommit, Clock, Github, FileCode2, Trash2, Sparkles, ArrowUp, ArrowDown, Minus } from 'lucide-react'
+import {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem
+} from '@/components/ui/dropdown-menu'
+import { X, UserPlus, Loader2, GitBranch, GitCommit, Clock, Github, FileCode2, Trash2, Sparkles, ArrowUp, ArrowDown, Minus, ChevronDown, Plus } from 'lucide-react'
 import { ConnectGithubModal } from '../dev-tools/ConnectGithubModal'
 import { CreateBranchModal } from '../dev-tools/CreateBranchModal'
 import { CreateCommitModal } from '../dev-tools/CreateCommitModal'
+import { SubTasksChecklist } from '../SubTasksChecklist'
 
 interface TaskDetailsModalProps {
     taskId: string | null
@@ -50,6 +57,9 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
     const [createBranchOpen, setCreateBranchOpen] = useState(false)
     const [createCommitOpen, setCreateCommitOpen] = useState(false)
     
+    // Manual Sub-task Creation State
+    const [isAddingSubTask, setIsAddingSubTask] = useState(false)
+    const [manualSubTaskTitle, setManualSubTaskTitle] = useState('')
 
     const canEditAll = ['admin', 'pm', 'tester', 'developer'].includes(currentUserRole || '')
     const canDelete = ['admin', 'pm'].includes(currentUserRole || '')
@@ -256,6 +266,25 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
         }
     }
 
+    async function handleManualCreateSubTask(title: string) {
+        if (!taskId || !task || !title.trim()) return
+        const { data } = await supabase.from('tasks').insert({
+            project_id: projectId,
+            parent_id: taskId,
+            title: title.trim(),
+            description: 'Manual sub-task',
+            priority: task.priority || 'medium',
+            status: 'todo',
+            task_number: Math.floor(Math.random() * 1000) + 1000,
+            task_display_id: `SUB-${Math.floor(Math.random() * 900) + 100}`
+        }).select().single()
+
+        if (data) {
+            setSubTasks(prev => [...prev, data])
+            onUpdate()
+        }
+    }
+
     async function handleAddComment() {
         if (!newComment.trim() || !user || !taskId) return
         setSubmittingComment(true)
@@ -393,15 +422,69 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                                         <h3 className="text-[14px] font-semibold text-[#172B4D]">
                                             Sub-tasks
                                         </h3>
-                                        <button
-                                            onClick={handleBreakDownWithAI}
-                                            disabled={isBreakingDown || !canEditAll}
-                                            className="text-sm bg-[#EAE6FF] hover:bg-[#403294] hover:text-white text-[#403294] px-3 py-1.5 rounded-[3px] font-semibold transition-colors flex items-center gap-1.5 shadow-sm"
-                                        >
-                                            {isBreakingDown ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                                            Break down with AI
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            {!isAddingSubTask ? (
+                                                <button
+                                                    onClick={() => setIsAddingSubTask(true)}
+                                                    className="text-xs bg-[#DEEBFF] hover:bg-[#0052CC] hover:text-white text-[#0052CC] px-2.5 py-1 rounded-[3px] font-semibold transition-colors flex items-center gap-1 shadow-sm"
+                                                >
+                                                    <Plus className="w-3.5 h-3.5" />
+                                                    Add Sub-task
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => setIsAddingSubTask(false)}
+                                                    className="text-xs text-[#5E6C84] hover:text-[#172B4D]"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            )}
+
+                                            <button
+                                                onClick={handleBreakDownWithAI}
+                                                disabled={isBreakingDown || !canEditAll}
+                                                className="text-xs bg-[#EAE6FF] hover:bg-[#403294] hover:text-white text-[#403294] px-2.5 py-1 rounded-[3px] font-semibold transition-colors flex items-center gap-1 shadow-sm"
+                                            >
+                                                {isBreakingDown ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                                                Break down with AI
+                                            </button>
+                                        </div>
                                     </div>
+
+                                    {/* Manual Sub-task Input Field */}
+                                    {isAddingSubTask && (
+                                        <div className="mb-3 flex items-center gap-2">
+                                            <input
+                                                autoFocus
+                                                type="text"
+                                                placeholder="What needs to be done? Press Enter to save..."
+                                                value={manualSubTaskTitle}
+                                                onChange={e => setManualSubTaskTitle(e.target.value)}
+                                                onKeyDown={e => {
+                                                    if (e.key === 'Enter') {
+                                                        handleManualCreateSubTask(manualSubTaskTitle)
+                                                        setManualSubTaskTitle('')
+                                                        setIsAddingSubTask(false)
+                                                    } else if (e.key === 'Escape') {
+                                                        setIsAddingSubTask(false)
+                                                    }
+                                                }}
+                                                className="flex-1 border border-[#0052CC] rounded-[3px] px-3 py-1.5 text-xs text-[#172B4D] outline-none bg-white"
+                                            />
+                                            <button
+                                                onClick={() => {
+                                                    handleManualCreateSubTask(manualSubTaskTitle)
+                                                    setManualSubTaskTitle('')
+                                                    setIsAddingSubTask(false)
+                                                }}
+                                                disabled={!manualSubTaskTitle.trim()}
+                                                className="px-3 py-1.5 bg-[#0052CC] hover:bg-[#0047B3] disabled:opacity-50 text-white text-xs font-semibold rounded-[3px]"
+                                            >
+                                                Save
+                                            </button>
+                                        </div>
+                                    )}
+
                                     <div className="space-y-2">
                                         {subTasks.map(st => (
                                             <div key={st.id} className="flex items-center justify-between p-2.5 border border-[#DFE1E6] rounded-[3px] bg-white hover:bg-[#FAFBFC] transition-colors cursor-pointer">
@@ -417,9 +500,9 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                                                 </div>
                                             </div>
                                         ))}
-                                        {subTasks.length === 0 && (
+                                        {subTasks.length === 0 && !isAddingSubTask && (
                                             <div className="text-[13px] text-[#5E6C84] border border-[#DFE1E6] border-dashed rounded-[3px] p-4 text-center">
-                                                No sub-tasks yet. Click "Break down with AI" to auto-generate sub-tasks.
+                                                No sub-tasks yet. Click <strong>+ Add Sub-task</strong> or <strong>Break down with AI</strong> to add items.
                                             </div>
                                         )}
                                     </div>
@@ -572,12 +655,15 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                                         </div>
 
                                         <div className="flex items-center">
-                                            <label className="text-[12px] font-semibold text-[#5E6C84] w-1/3">Story Points</label>
+                                            <label className="text-[12px] font-semibold text-[#5E6C84] w-1/3 flex items-center gap-1">
+                                                Story Points
+                                                <span title="Relative effort score — not hours! Common scale: 1=trivial, 3=small, 5=medium, 8=large, 13=very complex. Used for sprint planning." className="cursor-help text-[#A5ADBA] hover:text-[#5E6C84] text-[10px] border border-[#A5ADBA] rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold flex-shrink-0">?</span>
+                                            </label>
                                             <div className="w-2/3">
                                                 <input 
                                                     type="number" 
-                                                    value={task.story_points || ''} 
-                                                    onChange={(e) => setTask({ ...task, story_points: e.target.value })}
+                                                    value={task.story_points === '' || task.story_points == null ? '' : Number(task.story_points)} 
+                                                    onChange={(e) => setTask({ ...task, story_points: e.target.value === '' ? '' : e.target.value })}
                                                     onBlur={(e) => updateField('story_points', e.target.value)}
                                                     className={`${selectClasses} px-3 py-1.5 outline-none`}
                                                     placeholder="0"
@@ -610,7 +696,10 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                                         </div>
 
                                         <div className="flex items-center">
-                                            <label className="text-[12px] font-semibold text-[#5E6C84] w-1/3 flex items-center gap-1">SLA <Clock className="w-3 h-3" /></label>
+                                            <label className="text-[12px] font-semibold text-[#5E6C84] w-1/3 flex items-center gap-1">
+                                                SLA <Clock className="w-3 h-3" />
+                                                <span title="Service Level Agreement — a time deadline to resolve this task based on priority. P0=24h, P1=48h, P2=1 week, P3=2 weeks. Red means breached, orange means warning (<24h left)." className="cursor-help text-[#A5ADBA] hover:text-[#5E6C84] text-[10px] border border-[#A5ADBA] rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold flex-shrink-0">?</span>
+                                            </label>
                                             <div className="w-2/3">
                                                 {(() => {
                                                     const sla = getSLADetails()
@@ -625,12 +714,13 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                                         </div>
                                     </div>
                                 </div>
-
                                 <div className="border border-[#DFE1E6] rounded-[3px]">
-                                    <div className="p-3 border-b border-[#DFE1E6] font-medium text-[14px] text-[#172B4D]">
+                                    <div className="p-3 border-b border-[#DFE1E6] font-medium text-[14px] text-[#172B4D] flex items-center gap-1.5">
                                         Development
+                                        <span title="Link Git branches and commits to this task to track development progress." className="cursor-help text-[#A5ADBA] hover:text-[#5E6C84] text-[10px] border border-[#A5ADBA] rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold flex-shrink-0">?</span>
                                     </div>
                                     <div className="p-3 space-y-4">
+
                                         {branches.length > 0 && (
                                             <div className="space-y-2">
                                                 <div className="text-[12px] font-semibold text-[#5E6C84]">Branches</div>
@@ -695,13 +785,102 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                                                             </button>
                                                         </div>
                                                         {isGithubConnected && (
-                                                            <a 
-                                                                href={`vscode://vscode.git/clone?url=https://github.com/${project.github_owner}/${project.github_repo}.git`}
-                                                                className="w-full text-center text-[13px] text-[#0052CC] hover:bg-[#DEEBFF] py-1.5 rounded-[3px] transition-colors flex items-center justify-center gap-2 mt-1"
-                                                            >
-                                                                <FileCode2 className="w-3.5 h-3.5" />
-                                                                Open in VS Code
-                                                            </a>
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <button className="w-full text-[13px] bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#172B4D] px-2 py-1.5 rounded-[3px] font-medium transition-colors border border-[#DFE1E6] flex items-center justify-between mt-1">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <FileCode2 className="w-3.5 h-3.5 text-[#5E6C84]" />
+                                                                            Open in coding tool
+                                                                        </div>
+                                                                        <ChevronDown className="w-3.5 h-3.5 text-[#5E6C84]" />
+                                                                    </button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="end" className="w-[320px] p-0 shadow-[0_8px_16px_-4px_rgba(9,30,66,0.25),0_0_1px_rgba(9,30,66,0.31)] rounded-[3px] border-none mt-1">
+                                                                    <div className="p-4 border-b border-[#DFE1E6]">
+                                                                        <h4 className="text-[14px] font-medium text-[#172B4D] mb-1">Open in coding tool</h4>
+                                                                        <p className="text-[12px] text-[#5E6C84] leading-relaxed">
+                                                                            Clone and open this repo in your preferred editor.
+                                                                        </p>
+                                                                    </div>
+                                                                    <div className="p-2 max-h-[280px] overflow-y-auto">
+                                                                        <div className="text-[11px] font-bold text-[#5E6C84] uppercase px-2 mb-1 mt-1">Select tool</div>
+                                                                        <DropdownMenuItem asChild className="cursor-pointer focus:bg-[#EBECF0] focus:text-[#172B4D] rounded-[3px] mx-1">
+                                                                            <a 
+                                                                                href={`vscode://vscode.git/clone?url=https://github.com/${project.github_owner}/${project.github_repo}.git`}
+                                                                                className="flex items-center gap-3 py-2 px-2"
+                                                                            >
+                                                                                <img src="https://code.visualstudio.com/favicon.ico" className="w-4 h-4" alt="VS Code" onError={(e) => { (e.target as HTMLImageElement).style.display='none' }} />
+                                                                                <div>
+                                                                                    <div className="text-[13px] font-medium text-[#172B4D]">VS Code</div>
+                                                                                    <div className="text-[11px] text-[#5E6C84]">Microsoft</div>
+                                                                                </div>
+                                                                            </a>
+                                                                        </DropdownMenuItem>
+                                                                        <DropdownMenuItem asChild className="cursor-pointer focus:bg-[#EBECF0] focus:text-[#172B4D] rounded-[3px] mx-1">
+                                                                            <a 
+                                                                                href={`cursor://vscode.git/clone?url=https://github.com/${project.github_owner}/${project.github_repo}.git`}
+                                                                                className="flex items-center gap-3 py-2 px-2"
+                                                                            >
+                                                                                <img src="https://www.cursor.com/favicon.ico" className="w-4 h-4" alt="Cursor" onError={(e) => { (e.target as HTMLImageElement).style.display='none' }} />
+                                                                                <div>
+                                                                                    <div className="text-[13px] font-medium text-[#172B4D]">Cursor</div>
+                                                                                    <div className="text-[11px] text-[#5E6C84]">AI-first editor</div>
+                                                                                </div>
+                                                                            </a>
+                                                                        </DropdownMenuItem>
+                                                                        <DropdownMenuItem asChild className="cursor-pointer focus:bg-[#EBECF0] focus:text-[#172B4D] rounded-[3px] mx-1">
+                                                                            <a 
+                                                                                href={`windsurf://vscode.git/clone?url=https://github.com/${project.github_owner}/${project.github_repo}.git`}
+                                                                                className="flex items-center gap-3 py-2 px-2"
+                                                                            >
+                                                                                <img src="https://codeium.com/favicon.ico" className="w-4 h-4" alt="Windsurf" onError={(e) => { (e.target as HTMLImageElement).style.display='none' }} />
+                                                                                <div>
+                                                                                    <div className="text-[13px] font-medium text-[#172B4D]">Windsurf</div>
+                                                                                    <div className="text-[11px] text-[#5E6C84]">Codeium</div>
+                                                                                </div>
+                                                                            </a>
+                                                                        </DropdownMenuItem>
+                                                                        <DropdownMenuItem asChild className="cursor-pointer focus:bg-[#EBECF0] focus:text-[#172B4D] rounded-[3px] mx-1">
+                                                                            <a 
+                                                                                href={`jetbrains://idea/checkout/git?idea.required.plugins.id=Git4Idea&checkout.repo=https://github.com/${project.github_owner}/${project.github_repo}.git`}
+                                                                                className="flex items-center gap-3 py-2 px-2"
+                                                                            >
+                                                                                <img src="https://www.jetbrains.com/favicon.ico" className="w-4 h-4" alt="IntelliJ" onError={(e) => { (e.target as HTMLImageElement).style.display='none' }} />
+                                                                                <div>
+                                                                                    <div className="text-[13px] font-medium text-[#172B4D]">IntelliJ IDEA</div>
+                                                                                    <div className="text-[11px] text-[#5E6C84]">JetBrains</div>
+                                                                                </div>
+                                                                            </a>
+                                                                        </DropdownMenuItem>
+                                                                        <DropdownMenuItem asChild className="cursor-pointer focus:bg-[#EBECF0] focus:text-[#172B4D] rounded-[3px] mx-1">
+                                                                            <a 
+                                                                                href={`webstorm://open?url=https://github.com/${project.github_owner}/${project.github_repo}`}
+                                                                                className="flex items-center gap-3 py-2 px-2"
+                                                                            >
+                                                                                <img src="https://www.jetbrains.com/favicon.ico" className="w-4 h-4" alt="WebStorm" onError={(e) => { (e.target as HTMLImageElement).style.display='none' }} />
+                                                                                <div>
+                                                                                    <div className="text-[13px] font-medium text-[#172B4D]">WebStorm</div>
+                                                                                    <div className="text-[11px] text-[#5E6C84]">JetBrains</div>
+                                                                                </div>
+                                                                            </a>
+                                                                        </DropdownMenuItem>
+                                                                        <DropdownMenuItem asChild className="cursor-pointer focus:bg-[#EBECF0] focus:text-[#172B4D] rounded-[3px] mx-1">
+                                                                            <a 
+                                                                                href={`https://github.com/${project.github_owner}/${project.github_repo}`}
+                                                                                target="_blank"
+                                                                                rel="noreferrer"
+                                                                                className="flex items-center gap-3 py-2 px-2"
+                                                                            >
+                                                                                <img src="https://github.com/favicon.ico" className="w-4 h-4" alt="GitHub" onError={(e) => { (e.target as HTMLImageElement).style.display='none' }} />
+                                                                                <div>
+                                                                                    <div className="text-[13px] font-medium text-[#172B4D]">GitHub.com</div>
+                                                                                    <div className="text-[11px] text-[#5E6C84]">Open in browser</div>
+                                                                                </div>
+                                                                            </a>
+                                                                        </DropdownMenuItem>
+                                                                    </div>
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
                                                         )}
                                                     </>
                                                 )
@@ -710,61 +889,129 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                                     </div>
                                 </div>
 
-                                <div className="border border-[#DFE1E6] rounded-[3px]">
-                                    <div className="p-3 border-b border-[#DFE1E6] font-medium text-[14px] text-[#172B4D]">
-                                        Time Tracking
+                                <SubTasksChecklist issueId={task.id} />
+
+                                <div className="border border-[#DFE1E6] rounded-[3px] overflow-hidden">
+                                    <div className="p-3 border-b border-[#DFE1E6] bg-[#FAFBFC] font-semibold text-[13px] text-[#172B4D] flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5">
+                                            <Clock className="w-4 h-4 text-[#5E6C84]" />
+                                            <span className="font-semibold text-[13px] text-[#172B4D]">Time Tracking</span>
+                                        </div>
+                                        {!logWorkOpen && (
+                                            <button onClick={() => setLogWorkOpen(true)}
+                                                className="text-[11px] bg-[#DEEBFF] hover:bg-[#0052CC] hover:text-white text-[#0052CC] px-2 py-0.5 rounded font-semibold transition-colors">
+                                                + Log Work
+                                            </button>
+                                        )}
                                     </div>
-                                    <div className="p-3 space-y-4">
-                                        <div className="flex items-center">
-                                            <label className="text-[12px] font-semibold text-[#5E6C84] w-1/3">Estimate</label>
-                                            <div className="w-2/3 flex items-center gap-2">
-                                                <input 
-                                                    type="number" 
-                                                    value={task.original_estimate || ''} 
-                                                    onChange={(e) => setTask({ ...task, original_estimate: e.target.value })}
-                                                    onBlur={(e) => updateField('original_estimate', e.target.value)}
-                                                    className={`${selectClasses} px-3 py-1.5 outline-none w-20`}
-                                                    placeholder="0"
-                                                    disabled={!canEditAll}
-                                                />
-                                                <span className="text-[12px] text-[#5E6C84]">minutes</span>
-                                            </div>
+
+                                    <div className="p-3 space-y-3">
+                                        {/* Explanatory note */}
+                                        <div className="text-[11px] text-[#5E6C84] bg-[#F4F5F7] rounded px-2.5 py-2 leading-relaxed">
+                                            <span className="font-semibold text-[#172B4D]">How it works:</span> Set how long you <em>think</em> this will take (Estimate). As you work, click <em>Log Work</em> to record actual time spent.
                                         </div>
 
-                                        <div className="space-y-1.5">
-                                            <div className="flex justify-between text-[12px] text-[#5E6C84]">
-                                                <span>Logged: {task.time_spent || 0}m</span>
-                                                <span>Remaining: {Math.max(0, (task.original_estimate || 0) - (task.time_spent || 0))}m</span>
-                                            </div>
-                                            <div className="h-1.5 w-full bg-[#DFE1E6] rounded-full overflow-hidden">
-                                                <div 
-                                                    className="h-full bg-[#0052CC]" 
-                                                    style={{ width: `${Math.min(100, (task.time_spent || 0) / (task.original_estimate || 1) * 100)}%` }}
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {logWorkOpen ? (
-                                            <div className="space-y-2 border border-[#DFE1E6] p-2 rounded-[3px] bg-[#FAFBFC]">
-                                                <input 
-                                                    type="text" 
-                                                    placeholder="e.g. 2h 30m"
-                                                    value={logWorkTime}
-                                                    onChange={(e) => setLogWorkTime(e.target.value)}
-                                                    className={`${selectClasses} px-3 py-1.5 outline-none bg-white`}
-                                                />
-                                                <div className="flex justify-end gap-2">
-                                                    <button onClick={() => setLogWorkOpen(false)} className="text-[12px] text-[#5E6C84] hover:underline">Cancel</button>
-                                                    <button onClick={handleLogWork} className="text-[12px] bg-[#0052CC] text-white px-2 py-0.5 rounded-[3px] hover:bg-[#0047B3]">Save</button>
+                                        {/* Estimate row */}
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex-1">
+                                                <div className="text-[11px] font-semibold text-[#5E6C84] mb-1 uppercase tracking-wide">Estimate (how long you think)</div>
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="number"
+                                                        value={task.original_estimate === '' || task.original_estimate == null ? '' : Number(task.original_estimate)}
+                                                        onChange={(e) => setTask({ ...task, original_estimate: e.target.value === '' ? '' : e.target.value })}
+                                                        onBlur={(e) => updateField('original_estimate', e.target.value)}
+                                                        className={`${selectClasses} px-2 py-1.5 outline-none w-20 text-[13px]`}
+                                                        placeholder="0"
+                                                        disabled={!canEditAll}
+                                                    />
+                                                    <span className="text-[12px] text-[#5E6C84]">minutes</span>
+                                                    {(task.original_estimate && Number(task.original_estimate) > 0) && (
+                                                        <span className="text-[12px] font-medium text-[#172B4D]">
+                                                            = {Math.floor(Number(task.original_estimate) / 60) > 0 ? `${Math.floor(Number(task.original_estimate) / 60)}h ` : ''}{Number(task.original_estimate) % 60 > 0 ? `${Number(task.original_estimate) % 60}m` : ''}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
-                                        ) : (
-                                            <button 
-                                                onClick={() => setLogWorkOpen(true)}
-                                                className="w-full text-center text-[13px] text-[#0052CC] hover:bg-[#DEEBFF] py-1 rounded-[3px] transition-colors"
-                                            >
-                                                Log Work
-                                            </button>
+                                        </div>
+
+                                        {/* Visual progress */}
+                                        {(() => {
+                                            const estimate = Number(task.original_estimate) || 0
+                                            const spent = Number(task.time_spent) || 0
+                                            const remaining = Math.max(0, estimate - spent)
+                                            const pct = estimate > 0 ? Math.min(100, Math.round((spent / estimate) * 100)) : 0
+                                            const overBudget = spent > estimate && estimate > 0
+                                            const fmtMins = (m: number) => { if (!m) return '0m'; const h = Math.floor(m/60); const r = m%60; return h > 0 ? (r > 0 ? `${h}h ${r}m` : `${h}h`) : `${r}m` }
+                                            if (estimate === 0 && spent === 0) return null
+                                            return (
+                                                <div className="space-y-2 pt-1 border-t border-[#DFE1E6]">
+                                                    {/* Three stats */}
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        <div className="text-center bg-[#F4F5F7] rounded p-2">
+                                                            <div className="text-[10px] text-[#5E6C84] uppercase font-bold mb-0.5">Estimated</div>
+                                                            <div className="text-[14px] font-bold text-[#172B4D]">{fmtMins(estimate)}</div>
+                                                        </div>
+                                                        <div className={`text-center rounded p-2 ${spent > 0 ? 'bg-[#DEEBFF]' : 'bg-[#F4F5F7]'}`}>
+                                                            <div className="text-[10px] text-[#5E6C84] uppercase font-bold mb-0.5">Logged</div>
+                                                            <div className={`text-[14px] font-bold ${spent > 0 ? 'text-[#0052CC]' : 'text-[#B3BAC5]'}`}>{fmtMins(spent)}</div>
+                                                        </div>
+                                                        <div className={`text-center rounded p-2 ${overBudget ? 'bg-[#FFEBE6]' : remaining > 0 ? 'bg-[#E3FCEF]' : 'bg-[#E3FCEF]'}`}>
+                                                            <div className="text-[10px] text-[#5E6C84] uppercase font-bold mb-0.5">Remaining</div>
+                                                            <div className={`text-[14px] font-bold ${overBudget ? 'text-[#DE350B]' : 'text-[#00875A]'}`}>
+                                                                {overBudget ? `+${fmtMins(spent - estimate)} over` : fmtMins(remaining)}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {/* Progress bar */}
+                                                    <div>
+                                                        <div className="flex justify-between text-[10px] text-[#5E6C84] mb-1">
+                                                            <span>Progress</span>
+                                                            <span className={`font-bold ${overBudget ? 'text-[#DE350B]' : 'text-[#0052CC]'}`}>{pct}%</span>
+                                                        </div>
+                                                        <div className="h-3 bg-[#DFE1E6] rounded-full overflow-hidden">
+                                                            <div className={`h-full rounded-full transition-all ${overBudget ? 'bg-[#FF5630]' : pct > 75 ? 'bg-[#FF991F]' : 'bg-[#36B37E]'}`}
+                                                                style={{ width: `${pct}%` }} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })()}
+
+                                        {/* Log Work Panel */}
+                                        {logWorkOpen && (
+                                            <div className="border border-[#0052CC]/30 rounded bg-[#F4F5F7] p-3 space-y-3">
+                                                <div className="text-[12px] font-semibold text-[#172B4D] flex items-center gap-2">
+                                                    <Clock className="w-3.5 h-3.5 text-[#0052CC]" />
+                                                    Log Work — how much time did you spend?
+                                                </div>
+                                                {/* Quick presets */}
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {['30m', '1h', '2h', '4h', '8h'].map(preset => (
+                                                        <button key={preset} onClick={() => setLogWorkTime(preset)}
+                                                            className={`px-2 py-1 rounded text-[11px] font-semibold border transition-colors ${
+                                                                logWorkTime === preset
+                                                                    ? 'bg-[#0052CC] text-white border-[#0052CC]'
+                                                                    : 'bg-white text-[#42526E] border-[#DFE1E6] hover:border-[#0052CC] hover:text-[#0052CC]'
+                                                            }`}>{preset}</button>
+                                                    ))}
+                                                    <input
+                                                        type="text"
+                                                        placeholder="custom (e.g. 1h 30m)"
+                                                        value={logWorkTime}
+                                                        onChange={e => setLogWorkTime(e.target.value)}
+                                                        className="flex-1 min-w-[120px] border border-[#DFE1E6] rounded px-2 py-1 text-[11px] bg-white outline-none focus:border-[#0052CC]"
+                                                    />
+                                                </div>
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button onClick={() => { setLogWorkOpen(false); setLogWorkTime('') }}
+                                                        className="text-[12px] text-[#5E6C84] hover:text-[#172B4D] px-2 py-1">Cancel</button>
+                                                    <button onClick={handleLogWork}
+                                                        className="text-[12px] bg-[#0052CC] hover:bg-[#0047B3] text-white px-3 py-1.5 rounded font-semibold transition-colors">
+                                                        Save Work Log
+                                                    </button>
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
                                 </div>

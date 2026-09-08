@@ -70,8 +70,43 @@ export const getRepoCollaborators = async (owner: string, repo: string, token?: 
             html_url: c.html_url,
             role_name: c.role_name ?? (c.permissions?.admin ? 'admin' : c.permissions?.push ? 'write' : 'read'),
         }))
-    } catch (e) {
-        console.error('Failed to fetch collaborators:', e)
+    } catch (e: any) {
+        if (e.status !== 403) {
+            console.error('Failed to fetch collaborators:', e)
+        }
         return []
     }
+}
+
+export const createOrGetGitHubRelease = async (
+    owner: string,
+    repo: string,
+    tag_name: string,
+    name: string,
+    body: string,
+    token?: string
+) => {
+    const octokit = new Octokit(token ? { auth: token } : {})
+    
+    // Check if release tag already exists on GitHub
+    try {
+        const existing = await octokit.rest.repos.getReleaseByTag({ owner, repo, tag: tag_name })
+        if (existing.data?.html_url) {
+            return { data: existing.data, created: false }
+        }
+    } catch {
+        // Tag does not exist yet on GitHub, proceed to creation
+    }
+
+    const { data } = await octokit.rest.repos.createRelease({
+        owner,
+        repo,
+        tag_name,
+        name,
+        body,
+        draft: false,
+        prerelease: false,
+        generate_release_notes: true,
+    })
+    return { data, created: true }
 }

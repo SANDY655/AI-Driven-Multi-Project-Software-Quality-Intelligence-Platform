@@ -167,7 +167,7 @@ export function SprintAnalytics() {
               <h2 className="text-[16px] font-medium text-[#172B4D]">Sprint Burndown</h2>
             </div>
             <div className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" minHeight={300}>
                 <LineChart data={burndownData} margin={{ top: 5, right: 30, left: -20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#EBECF0" />
                   <XAxis dataKey="day" stroke="#5E6C84" fontSize={12} tickLine={false} axisLine={false} />
@@ -189,7 +189,7 @@ export function SprintAnalytics() {
               <h2 className="text-[16px] font-medium text-[#172B4D]">Task Priority Distribution</h2>
             </div>
             <div className="h-[300px] w-full flex items-center justify-center relative">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" minHeight={300}>
                 <PieChart>
                   <Pie
                     data={priorityData}

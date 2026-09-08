@@ -4,11 +4,29 @@ import { supabase } from '../lib/supabase'
 import { DragDropContext, Droppable, type DropResult } from '@hello-pangea/dnd'
 import { TaskCard, type Task } from '../components/projects/tasks/TaskCard'
 import { BugCard, type Bug } from '../components/projects/BugCard'
-import { Loader2, Sparkles } from 'lucide-react'
+import {
+    Sparkles, Plus, Target, ListOrdered, Zap, Calendar
+} from 'lucide-react'
 
-type Issue = 
+type Issue =
     | { type: 'task', id: string, data: Task }
     | { type: 'bug', id: string, data: Bug }
+
+function getValidDateStr(dateValue: any, fallbackOffsetDays = 0): string {
+    try {
+        if (dateValue) {
+            const parsed = new Date(dateValue)
+            if (!isNaN(parsed.getTime())) {
+                return parsed.toISOString().split('T')[0]
+            }
+        }
+    } catch {
+        // Fallback
+    }
+    const d = new Date()
+    d.setDate(d.getDate() + fallbackOffsetDays)
+    return d.toISOString().split('T')[0]
+}
 
 export function BacklogPage() {
     const { id } = useParams<{ id: string }>()
@@ -20,333 +38,533 @@ export function BacklogPage() {
     const [isGeneratingEpics, setIsGeneratingEpics] = useState(false)
     const [members, setMembers] = useState<any[]>([])
     const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null)
+    const [epicFilter, setEpicFilter] = useState<string | null>(null)
+    const [sprintViewFilter, setSprintViewFilter] = useState<string>('all')
 
-    useEffect(() => {
-        loadData()
-    }, [id])
+    // Epic creation
+    const [creatingEpic, setCreatingEpic] = useState(false)
+    const [newEpicName, setNewEpicName] = useState('')
+    const [savingEpic, setSavingEpic] = useState(false)
+
+    // Complete sprint modal
+    const [completingSprintId, setCompletingSprintId] = useState<string | null>(null)
+
+    useEffect(() => { loadData() }, [id])
 
     async function loadData() {
         if (!id) return
-
         supabase.from('projects').select('*').eq('id', id).single().then(({ data }) => setProject(data))
-
-        const { data: sprintsData } = await supabase.from('sprints').select('*').eq('project_id', id).order('created_at', { ascending: false })
+        const { data: sprintsData } = await supabase.from('sprints').select('*').eq('project_id', id).order('created_at', { ascending: true })
         if (sprintsData) setSprints(sprintsData)
-
-        // Fetch epics safely (might not exist if user didn't run migration)
-        const { data: epicsData } = await supabase.from('epics').select('*').eq('project_id', id).order('created_at', { ascending: false })
+        const { data: epicsData } = await supabase.from('epics').select('*').eq('project_id', id).order('created_at', { ascending: true })
         if (epicsData) setEpics(epicsData)
-
-        const { data: membersData } = await supabase
-            .from('project_members')
-            .select(`profiles (id, display_name, avatar_url)`)
-            .eq('project_id', id)
-
-        if (membersData) {
-            setMembers(membersData.map((m: any) => m.profiles))
-        }
-
+        const { data: membersData } = await supabase.from('project_members').select(`profiles (id, display_name, avatar_url)`).eq('project_id', id)
+        if (membersData) setMembers(membersData.map((m: any) => m.profiles).filter(Boolean))
         try {
             const [tasksRes, bugsRes] = await Promise.all([
-                supabase.from('tasks').select('*, assignee:profiles!tasks_assigned_to_fkey(display_name, avatar_url), epic:epics(name), resolved_at').eq('project_id', id),
-                supabase.from('bugs').select('*, assignee:profiles!bugs_assigned_to_fkey(display_name, avatar_url), epic:epics(name), resolved_at').eq('project_id', id)
+                supabase.from('tasks').select('*, assignee:profiles!tasks_assigned_to_fkey(display_name, avatar_url), epic:epics(id, name), resolved_at').eq('project_id', id),
+                supabase.from('bugs').select('*, assignee:profiles!bugs_assigned_to_fkey(display_name, avatar_url), epic:epics(id, name), resolved_at').eq('project_id', id)
             ])
-
-            const combined: Issue[] = []
-            if (tasksRes.data) {
-                combined.push(...tasksRes.data.map((t: any) => ({ type: 'task' as const, id: `task-${t.id}`, data: t })))
-            }
-            if (bugsRes.data) {
-                combined.push(...bugsRes.data.map((b: any) => ({ type: 'bug' as const, id: `bug-${b.id}`, data: b })))
-            }
-
-            setIssues(combined)
+            const taskIssues: Issue[] = (tasksRes.data || []).map((t: any) => ({ type: 'task', id: `task-${t.id}`, data: t }))
+            const bugIssues: Issue[] = (bugsRes.data || []).map((b: any) => ({ type: 'bug', id: `bug-${b.id}`, data: b }))
+            setIssues([...taskIssues, ...bugIssues])
         } catch (e) {
-            console.error("Error loading backlog issues", e)
-        } finally {
+            console.error('Error loading backlog issues:', e)
         }
     }
 
-    const onDragEnd = async (result: DropResult) => {
+    async function onDragEnd(result: DropResult) {
         const { destination, source, draggableId } = result
-
         if (!destination) return
         if (destination.droppableId === source.droppableId && destination.index === source.index) return
 
-        const newSprintId = destination.droppableId === 'backlog' ? null : destination.droppableId
-
-        // Optimistic update
-        const updatedIssues = [...issues]
-        const sourceIndex = updatedIssues.findIndex(i => i.id === draggableId)
-        if (sourceIndex === -1) return
-
-        const issue = updatedIssues[sourceIndex]
-        if (issue.type === 'task') {
-            updatedIssues[sourceIndex] = { ...issue, data: { ...issue.data, sprint_id: newSprintId ?? undefined } }
-        } else {
-            updatedIssues[sourceIndex] = { ...issue, data: { ...issue.data, sprint_id: newSprintId ?? undefined } }
-        }
-        setIssues(updatedIssues)
-
         const isTask = draggableId.startsWith('task-')
-        const table = isTask ? 'tasks' : 'bugs'
-        const rawId = draggableId.replace(isTask ? 'task-' : 'bug-', '')
+        const rawId = draggableId.replace(/^(task|bug)-/, '')
+        const targetSprintId = destination.droppableId === 'backlog' ? null : destination.droppableId
 
-        // We wrap in try-catch in case sprint_id doesn't exist on bugs table yet
-        try {
-            await supabase.from(table).update({ sprint_id: newSprintId }).eq('id', rawId)
-        } catch (e) {
-            console.error("Migration missing for bugs.sprint_id")
-        }
+        setIssues(prev => prev.map(issue => {
+            if (issue.id === draggableId) {
+                return { ...issue, data: { ...issue.data, sprint_id: targetSprintId } as any }
+            }
+            return issue
+        }))
+
+        await supabase.from(isTask ? 'tasks' : 'bugs').update({ sprint_id: targetSprintId }).eq('id', rawId)
+        loadData()
     }
 
     async function createSprint() {
         if (!id) return
-        await supabase.from('sprints').insert({ project_id: id, name: `Sprint ${sprints.length + 1}` })
-        loadData()
+        const count = sprints.length + 1
+        const { data } = await supabase.from('sprints').insert({ project_id: id, name: `Sprint ${count}`, status: 'planned' }).select().single()
+        if (data) setSprints(prev => [...prev, data])
     }
 
     async function startSprint(sprintId: string) {
-        await supabase.from('sprints').update({ status: 'active' }).eq('id', sprintId)
+        const startDate = new Date().toISOString().split('T')[0]
+        const endDate = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]
+        await supabase.from('sprints').update({ status: 'active', start_date: startDate, end_date: endDate }).eq('id', sprintId)
+        loadData()
+    }
+
+    async function updateSprintDates(sprintId: string, startDate: string, endDate: string) {
+        await supabase.from('sprints').update({ start_date: startDate, end_date: endDate }).eq('id', sprintId)
         loadData()
     }
 
     async function completeSprint(sprintId: string) {
-        await supabase.from('sprints').update({ status: 'completed' }).eq('id', sprintId)
+        const sprintIssues = issues.filter(i => (i.data as any).sprint_id === sprintId)
+        const unfinished = sprintIssues.filter(i => {
+            const s = (i.data as any).status
+            return s !== 'closed' && s !== 'resolved' && s !== 'done'
+        })
+        for (const issue of unfinished) {
+            const isTask = issue.type === 'task'
+            const rawId = issue.data.id
+            await supabase.from(isTask ? 'tasks' : 'bugs').update({ sprint_id: null }).eq('id', rawId)
+        }
+        await supabase.from('sprints').update({ status: 'completed', end_date: new Date().toISOString().split('T')[0] }).eq('id', sprintId)
+        setCompletingSprintId(null)
         loadData()
+    }
+
+    async function createEpic() {
+        if (!newEpicName.trim() || !id) return
+        setSavingEpic(true)
+        try {
+            const { error } = await supabase.from('epics').insert({ 
+                project_id: id, 
+                name: newEpicName.trim(),
+                status: 'planned'
+            })
+            if (error) {
+                console.error('Error creating epic:', error)
+                alert(`Failed to create epic: ${error.message}`)
+            } else {
+                setNewEpicName('')
+                setCreatingEpic(false)
+                loadData()
+            }
+        } catch (err: any) {
+            console.error('Failed to create epic:', err)
+        } finally {
+            setSavingEpic(false)
+        }
     }
 
     async function handleAutoPlan(sprintId: string) {
         setIsPlanning(true)
         try {
-            // Mock AI behavior for demonstration
-            // Take up to 5 top priority backlog items and assign them to sprint
             const backlog = issues.filter(i => !(i.data as any).sprint_id)
             const toPlan = backlog.slice(0, 5)
-            
             for (const issue of toPlan) {
-                const isTask = issue.type === 'task'
-                const table = isTask ? 'tasks' : 'bugs'
-                await supabase.from(table).update({ sprint_id: sprintId }).eq('id', issue.data.id)
+                await supabase.from(issue.type === 'task' ? 'tasks' : 'bugs').update({ sprint_id: sprintId }).eq('id', issue.data.id)
             }
             await loadData()
-        } finally {
-            setIsPlanning(false)
-        }
+        } finally { setIsPlanning(false) }
     }
 
     async function handleGenerateEpics() {
         setIsGeneratingEpics(true)
         try {
-            // Mock AI behavior to generate epics based on backlog items
-            const epicsToCreate = [
-                { project_id: id, name: 'Authentication Overhaul', description: 'Generated by AI based on backlog items.' },
-                { project_id: id, name: 'Performance Improvements', description: 'Generated by AI based on backlog items.' }
-            ]
-            
-            await supabase.from('epics').insert(epicsToCreate)
+            await supabase.from('epics').insert([
+                { project_id: id, name: 'Authentication & Security', status: 'planned' },
+                { project_id: id, name: 'Performance Improvements', status: 'planned' },
+                { project_id: id, name: 'UI / UX Enhancements', status: 'planned' }
+            ])
             await loadData()
-        } finally {
-            setIsGeneratingEpics(false)
-        }
+        } finally { setIsGeneratingEpics(false) }
     }
 
     if (!project) return null
 
-    const filteredIssues = assigneeFilter ? issues.filter(i => i.data.assigned_to === assigneeFilter) : issues
-    const backlogIssues = filteredIssues.filter(i => !(i.data as any).sprint_id)
+    const filtered = issues.filter(i => {
+        if (assigneeFilter && i.data.assigned_to !== assigneeFilter) return false
+        if (epicFilter && (i.data as any).epic?.id !== epicFilter) return false
+        return true
+    })
+
+    const backlogIssues = filtered.filter(i => !(i.data as any).sprint_id)
+
+    const sprintIssueCount = (sprintId: string) => issues.filter(i => (i.data as any).sprint_id === sprintId).length
+    const sprintPoints = (sprintId: string) => issues.filter(i => (i.data as any).sprint_id === sprintId).reduce((acc, i) => acc + ((i.data as any).story_points || 0), 0)
+    const sprintDoneCount = (sprintId: string) => issues.filter(i => {
+        if ((i.data as any).sprint_id !== sprintId) return false
+        const s = (i.data as any).status
+        return s === 'closed' || s === 'resolved' || s === 'done'
+    }).length
+
+    const issueCountByEpic = (epicId: string) => issues.filter(i => (i.data as any).epic?.id === epicId).length
+
+    const filteredSprints = sprints.filter(s => {
+        if (sprintViewFilter === 'active') return s.status === 'active'
+        if (sprintViewFilter === 'planned') return s.status === 'planned' || !s.status
+        return true
+    })
+
+    // Timeline days
+    const today = new Date()
+    const timelineDays: Date[] = []
+    const startDate = new Date(today)
+    startDate.setDate(today.getDate() - 5)
+    for (let i = 0; i < 21; i++) {
+        const d = new Date(startDate)
+        d.setDate(startDate.getDate() + i)
+        timelineDays.push(d)
+    }
 
     return (
-        <div className="flex flex-col flex-1 min-h-0 w-full bg-white overflow-y-auto">
-            {/* Header */}
-            <div className="px-8 pt-8 pb-4 flex-shrink-0">
-                <div className="flex items-center text-sm text-[#5E6C84] mb-2">
-                    <Link to="/projects" className="hover:underline">Projects</Link>
-                    <span className="mx-2">/</span>
-                    <Link to={`/projects/${id}`} className="hover:underline">{project.name}</Link>
-                    <span className="mx-2">/</span>
-                    <span className="text-[#172B4D]">Backlog</span>
-                </div>
-                
-                <div className="flex justify-between items-end">
-                    <h1 className="text-2xl font-medium tracking-tight text-[#172B4D]">
-                        Backlog
-                    </h1>
+        <div className="h-[calc(100vh-56px)] flex flex-col bg-white overflow-hidden">
+
+            {/* TOP BAR */}
+            <div className="px-6 py-3 border-b border-[#DFE1E6] flex items-center justify-between flex-shrink-0 bg-white z-20">
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center text-xs text-[#5E6C84]">
+                        <Link to="/projects" className="hover:underline">Projects</Link>
+                        <span className="mx-2">/</span>
+                        <Link to={`/projects/${id}`} className="hover:underline">{project.name}</Link>
+                        <span className="mx-2">/</span>
+                        <span className="text-[#172B4D] font-bold">Backlog & Roadmap</span>
+                    </div>
                 </div>
 
-                <div className="mt-6 flex items-center gap-4">
-                    <span className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider">Quick Filters</span>
-                    <div className="flex items-center gap-1">
-                        <button
-                            onClick={() => setAssigneeFilter(null)}
-                            className={`px-3 py-1.5 rounded-[3px] text-sm font-medium transition-colors ${!assigneeFilter ? 'bg-[#DEEBFF] text-[#0052CC]' : 'text-[#42526E] hover:bg-[#EBECF0]'}`}
-                        >
-                            All
-                        </button>
-                        <div className="w-px h-4 bg-[#DFE1E6] mx-2"></div>
-                        {members.map(member => (
-                            <button
-                                key={member.id}
-                                onClick={() => setAssigneeFilter(assigneeFilter === member.id ? null : member.id)}
-                                className={`p-1 rounded-full transition-all ${assigneeFilter === member.id ? 'ring-2 ring-[#0052CC] ring-offset-1' : 'hover:opacity-80'}`}
-                                title={member.display_name}
-                            >
-                                {member.avatar_url ? (
-                                    <img src={member.avatar_url} className="w-7 h-7 rounded-full" alt={member.display_name} />
-                                ) : (
-                                    <div className="w-7 h-7 rounded-full bg-[#0052CC] text-white flex items-center justify-center text-xs font-bold">
-                                        {member.display_name?.charAt(0)}
-                                    </div>
-                                )}
+                <div className="flex items-center gap-3">
+                    {/* Member Filter Chips */}
+                    <div className="flex items-center gap-1.5">
+                        {members.map(m => (
+                            <button key={m.id} onClick={() => setAssigneeFilter(assigneeFilter === m.id ? null : m.id)}
+                                className={`flex items-center gap-1.5 px-2 py-1 rounded transition-all text-xs ${assigneeFilter === m.id ? 'bg-[#DEEBFF] ring-2 ring-[#0052CC]' : 'hover:bg-[#EBECF0]'}`}
+                                title={m.display_name}>
+                                {m.avatar_url ? <img src={m.avatar_url} className="w-4 h-4 rounded-full" alt="" /> :
+                                    <div className="w-4 h-4 rounded-full bg-[#0052CC] text-white text-[9px] font-bold flex items-center justify-center">{m.display_name?.charAt(0)}</div>}
+                                <span className="text-[#172B4D] font-medium">{m.display_name}</span>
                             </button>
                         ))}
                     </div>
+
+                    <button onClick={createSprint} className="px-3 py-1.5 bg-[#0052CC] hover:bg-[#0047B3] text-white text-xs font-bold rounded transition-colors flex items-center gap-1 shadow-xs">
+                        <Plus className="w-3.5 h-3.5" />
+                        New Sprint
+                    </button>
                 </div>
             </div>
 
-            <div className="flex flex-1 max-w-[1400px] w-full px-8 pb-12 gap-8">
-                {/* Epics Sidebar */}
-                <div className="w-[280px] flex-shrink-0 flex flex-col gap-4">
-                    <div className="bg-[#FAFBFC] border border-[#DFE1E6] rounded p-4">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="font-semibold text-[14px] text-[#172B4D] uppercase tracking-wider">Epics</h2>
-                            <button 
-                                onClick={handleGenerateEpics}
-                                disabled={isGeneratingEpics}
-                                className="p-1.5 text-[#403294] bg-[#EAE6FF] hover:bg-[#403294] hover:text-white rounded transition-colors flex items-center justify-center shadow-sm"
-                                title="Auto-Generate Epics with AI"
-                            >
-                                {isGeneratingEpics ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            {/* MAIN DUAL PANE SIDE-BY-SIDE CONTAINER */}
+            <div className="flex-1 flex overflow-hidden">
+                
+                {/* ── LEFT PANE: ROADMAP TIMELINE & EPICS (40% WIDTH) ── */}
+                <div className="w-[42%] bg-[#FAFBFC] border-r border-[#DFE1E6] flex flex-col flex-shrink-0 overflow-hidden">
+                    {/* Left Pane Header */}
+                    <div className="px-4 py-3 bg-white border-b border-[#DFE1E6] flex items-center justify-between flex-shrink-0">
+                        <div className="flex items-center gap-2">
+                            <Calendar className="w-4 h-4 text-[#0052CC]" />
+                            <h2 className="font-bold text-xs text-[#172B4D] uppercase tracking-wider">Sprint & Epic Roadmap</h2>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button onClick={handleGenerateEpics} disabled={isGeneratingEpics} className="text-[11px] text-[#6554C0] font-semibold bg-[#EAE6FF] px-2 py-0.5 rounded hover:bg-[#6554C0] hover:text-white transition-colors flex items-center gap-1">
+                                <Sparkles className="w-3 h-3" /> AI Epics
+                            </button>
+                            <button onClick={() => setCreatingEpic(true)} className="text-[11px] text-[#0052CC] font-semibold bg-[#DEEBFF] px-2 py-0.5 rounded hover:bg-[#0052CC] hover:text-white transition-colors">
+                                + Epic
                             </button>
                         </div>
-                        {epics.length === 0 ? (
-                            <div className="text-[13px] text-[#5E6C84] p-3 border border-dashed border-[#DFE1E6] rounded bg-white text-center">
-                                No epics found. Click the AI button to auto-generate epics from your backlog.
-                            </div>
-                        ) : (
-                            <div className="space-y-2">
-                                {epics.map(epic => (
-                                    <div key={epic.id} className="p-2.5 bg-white border border-[#DFE1E6] rounded-[3px] shadow-[0_1px_2px_rgba(9,30,66,0.15)] text-[13px] font-medium text-[#172B4D] cursor-pointer hover:bg-[#EBECF0] transition-colors flex items-center gap-2">
-                                        <div className="w-3 h-3 rounded bg-[#6554C0] flex-shrink-0"></div>
-                                        <span className="truncate">{epic.name}</span>
-                                    </div>
-                                ))}
+                    </div>
+
+                    {/* Left Pane Scroll Body */}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-5">
+
+                        {/* Inline Create Epic Form */}
+                        {creatingEpic && (
+                            <div className="p-3 bg-white border border-[#0052CC] rounded-md space-y-2 shadow-xs">
+                                <input
+                                    autoFocus
+                                    value={newEpicName}
+                                    onChange={e => setNewEpicName(e.target.value)}
+                                    placeholder="New Epic Title..."
+                                    className="w-full border border-[#DFE1E6] rounded px-2.5 py-1 text-xs text-[#172B4D] outline-none focus:border-[#0052CC]"
+                                />
+                                <div className="flex items-center justify-end gap-2">
+                                    <button onClick={() => setCreatingEpic(false)} className="text-xs text-[#5E6C84] hover:text-[#172B4D]">Cancel</button>
+                                    <button onClick={createEpic} disabled={savingEpic || !newEpicName.trim()} className="text-xs bg-[#0052CC] text-white px-3 py-1 rounded font-semibold">Save</button>
+                                </div>
                             </div>
                         )}
+
+                        {/* GANTT TIMELINE CHART */}
+                        <div className="bg-white border border-[#DFE1E6] rounded-lg overflow-hidden shadow-xs">
+                            <div className="px-3 py-2 bg-[#FAFBFC] border-b border-[#DFE1E6] text-[11px] font-bold text-[#5E6C84] flex items-center justify-between">
+                                <span>Gantt Schedule</span>
+                                <span>{sprints.length} Sprints</span>
+                            </div>
+
+                            <div className="overflow-x-auto">
+                                <div className="min-w-[480px] divide-y divide-[#DFE1E6]">
+                                    {/* Header Row */}
+                                    <div className="flex bg-[#FAFBFC] border-b border-[#DFE1E6] text-[9px] font-bold text-[#5E6C84]">
+                                        <div className="w-36 p-1.5 border-r border-[#DFE1E6] sticky left-0 bg-[#FAFBFC] z-10 truncate">Item</div>
+                                        <div className="flex-1 flex">
+                                            {timelineDays.map((d, idx) => (
+                                                <div key={idx} className="flex-1 text-center py-1 border-r border-[#DFE1E6]/40 min-w-[20px]">
+                                                    {d.getDate()}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Sprint Rows */}
+                                    {sprints.map(s => {
+                                        const count = sprintIssueCount(s.id)
+                                        const done = sprintDoneCount(s.id)
+                                        const pct = count > 0 ? Math.round((done / count) * 100) : 0
+                                        const sDateStr = getValidDateStr(s.start_date, 0)
+                                        const eDateStr = getValidDateStr(s.end_date, 14)
+
+                                        return (
+                                            <div key={s.id} className="flex items-center text-xs">
+                                                <div className="w-36 p-2 border-r border-[#DFE1E6] sticky left-0 bg-white z-10 space-y-0.5">
+                                                    <div className="font-bold text-[11px] text-[#172B4D] truncate">{s.name}</div>
+                                                    <div className="flex items-center gap-1 text-[9px] text-[#5E6C84]">
+                                                        <input 
+                                                            type="date" 
+                                                            value={sDateStr} 
+                                                            onChange={e => updateSprintDates(s.id, e.target.value, eDateStr)}
+                                                            className="border rounded px-0.5 text-[9px] bg-white outline-none w-16" 
+                                                        />
+                                                        <span>→</span>
+                                                        <input 
+                                                            type="date" 
+                                                            value={eDateStr} 
+                                                            onChange={e => updateSprintDates(s.id, sDateStr, e.target.value)}
+                                                            className="border rounded px-0.5 text-[9px] bg-white outline-none w-16" 
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="flex-1 p-1.5 relative flex items-center">
+                                                    <div className="w-full bg-[#FAFBFC] border border-dashed border-[#DFE1E6] rounded h-6 relative overflow-hidden flex items-center px-2">
+                                                        <div 
+                                                            className={`h-full absolute left-0 top-0 rounded ${
+                                                                s.status === 'active' ? 'bg-[#0052CC]' : 'bg-[#6554C0]'
+                                                            }`} 
+                                                            style={{ width: `${Math.max(5, pct)}%` }} 
+                                                        />
+                                                        <span className="relative z-10 text-[10px] font-bold text-white drop-shadow">
+                                                            {pct}%
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* EPICS ACCORDION LIST */}
+                        <div className="bg-white border border-[#DFE1E6] rounded-lg p-3 space-y-2 shadow-xs">
+                            <div className="flex items-center justify-between text-xs font-bold text-[#172B4D]">
+                                <span className="flex items-center gap-1.5">
+                                    <Target className="w-4 h-4 text-[#6554C0]" />
+                                    Project Epics ({epics.length})
+                                </span>
+                            </div>
+
+                            {epics.length === 0 ? (
+                                <div className="text-center py-4 text-xs text-[#5E6C84]">
+                                    No epics created yet. Click <strong>+ Epic</strong> above.
+                                </div>
+                            ) : (
+                                <div className="space-y-1.5">
+                                    {epics.map(epic => {
+                                        const count = issueCountByEpic(epic.id)
+                                        const isSelected = epicFilter === epic.id
+                                        return (
+                                            <button
+                                                key={epic.id}
+                                                onClick={() => setEpicFilter(isSelected ? null : epic.id)}
+                                                className={`w-full text-left p-2 rounded text-xs font-medium transition-all flex items-center justify-between ${
+                                                    isSelected ? 'bg-[#EAE6FF] ring-1 ring-[#6554C0]' : 'bg-[#FAFBFC] hover:bg-[#EBECF0]'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: epic.color || '#6554C0' }} />
+                                                    <span className="truncate text-[#172B4D] font-bold">{epic.name}</span>
+                                                </div>
+                                                <span className="text-[10px] font-bold bg-[#DFE1E6] px-1.5 py-0.5 rounded text-[#42526E]">
+                                                    {count} issues
+                                                </span>
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 
-                {/* Sprints and Backlog */}
-                <div className="flex-1 min-w-0">
-                    <DragDropContext onDragEnd={onDragEnd}>
-                        <div className="space-y-6">
-                            {/* Sprints Container */}
-                            {sprints.map(sprint => {
-                                const sprintIssues = filteredIssues.filter(i => (i.data as any).sprint_id === sprint.id)
-                                return (
-                                    <div key={sprint.id} className="bg-[#F4F5F7] rounded flex flex-col">
-                                        <div className="px-4 py-3 flex justify-between items-center">
-                                            <div className="flex items-center gap-3">
-                                                <h2 className="font-semibold text-[14px] text-[#172B4D]">{sprint.name}</h2>
-                                                <span className="text-[12px] text-[#5E6C84]">{sprintIssues.length} issues</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider ${
-                                                    sprint.status === 'active' ? 'bg-[#DEEBFF] text-[#0052CC]' :
-                                                    sprint.status === 'completed' ? 'bg-[#E3FCEF] text-[#006644]' :
-                                                    'bg-[#DFE1E6] text-[#42526E]'
-                                                }`}>
-                                                    {sprint.status}
-                                                </span>
-                                                {sprint.status === 'planned' && (
-                                                    <>
-                                                        <button 
-                                                            onClick={() => handleAutoPlan(sprint.id)}
-                                                            disabled={isPlanning}
-                                                            className="text-sm bg-[#EAE6FF] hover:bg-[#403294] hover:text-white text-[#403294] px-3 py-1 rounded-[3px] font-semibold transition-colors flex items-center gap-1.5 shadow-sm"
-                                                            title="Auto-Plan Sprint with AI"
-                                                        >
-                                                            {isPlanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                                                            Auto-Plan
-                                                        </button>
-                                                        <button onClick={() => startSprint(sprint.id)} className="text-sm bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#172B4D] px-3 py-1 rounded font-medium transition-colors border border-[#DFE1E6]">
-                                                            Start sprint
-                                                        </button>
-                                                    </>
-                                                )}
-                                                {sprint.status === 'active' && (
-                                                    <button onClick={() => completeSprint(sprint.id)} className="text-sm bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#172B4D] px-3 py-1 rounded font-medium transition-colors border border-[#DFE1E6]">
-                                                        Complete sprint
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <Droppable droppableId={sprint.id}>
-                                            {(provided, snapshot) => (
-                                                <div
-                                                    ref={provided.innerRef}
-                                                    {...provided.droppableProps}
-                                                    className={`p-2 min-h-[40px] transition-colors ${snapshot.isDraggingOver ? 'bg-[#EBECF0]' : ''}`}
-                                                >
-                                                    {sprintIssues.map((issue, index) => (
-                                                        <div key={issue.id} className="mb-1">
-                                                            {issue.type === 'task' ? (
-                                                                <TaskCard task={issue.data as Task} index={index} onClick={() => {}} />
-                                                            ) : (
-                                                                <BugCard bug={issue.data as Bug} index={index} onClick={() => {}} />
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                    {provided.placeholder}
-                                                    {sprintIssues.length === 0 && !snapshot.isDraggingOver && (
-                                                        <div className="flex items-center justify-center h-10 text-[#5E6C84] text-[13px] border border-dashed border-[#DFE1E6] rounded bg-white m-2">
-                                                            Plan a sprint by dragging issues here
-                                                        </div>
+                {/* ── RIGHT PANE: ACTIVE SPRINTS & BACKLOG DRAG-AND-DROP (58% WIDTH) ── */}
+                <div className="flex-1 bg-white flex flex-col overflow-hidden min-w-0">
+                    
+                    {/* Right Pane Header & Filter Tabs */}
+                    <div className="px-6 py-3 border-b border-[#DFE1E6] flex items-center justify-between flex-shrink-0 bg-white">
+                        <div className="flex items-center gap-2">
+                            <ListOrdered className="w-4 h-4 text-[#0052CC]" />
+                            <h2 className="font-bold text-xs text-[#172B4D] uppercase tracking-wider">Sprints & Backlog Drag-and-Drop</h2>
+                        </div>
+
+                        {/* Filter Sprint Status Tabs */}
+                        <div className="flex items-center bg-[#F4F5F7] p-0.5 rounded text-xs font-semibold">
+                            <button
+                                onClick={() => setSprintViewFilter('all')}
+                                className={`px-2.5 py-1 rounded transition-colors ${sprintViewFilter === 'all' ? 'bg-white text-[#0052CC] shadow-xs' : 'text-[#5E6C84]'}`}
+                            >
+                                All ({sprints.length})
+                            </button>
+                            <button
+                                onClick={() => setSprintViewFilter('active')}
+                                className={`px-2.5 py-1 rounded transition-colors ${sprintViewFilter === 'active' ? 'bg-white text-[#0052CC] shadow-xs' : 'text-[#5E6C84]'}`}
+                            >
+                                Active Only
+                            </button>
+                            <button
+                                onClick={() => setSprintViewFilter('planned')}
+                                className={`px-2.5 py-1 rounded transition-colors ${sprintViewFilter === 'planned' ? 'bg-white text-[#0052CC] shadow-xs' : 'text-[#5E6C84]'}`}
+                            >
+                                Planned Only
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Right Pane Scroll Container */}
+                    <div className="flex-1 overflow-y-auto p-6">
+                        <DragDropContext onDragEnd={onDragEnd}>
+                            <div className="space-y-6">
+
+                                {/* Sprints List */}
+                                {filteredSprints.map(sprint => {
+                                    const sprintIssues = filtered.filter(i => (i.data as any).sprint_id === sprint.id)
+                                    const totalCount = sprintIssueCount(sprint.id)
+                                    const doneCount = sprintDoneCount(sprint.id)
+                                    const pts = sprintPoints(sprint.id)
+                                    const progress = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0
+                                    const isActive = sprint.status === 'active'
+                                    const isDone = sprint.status === 'completed'
+                                    const isCompleting = completingSprintId === sprint.id
+
+                                    return (
+                                        <div 
+                                            key={sprint.id}
+                                            className={`rounded-lg border-2 overflow-hidden transition-all ${
+                                                isActive ? 'border-[#0052CC]' : isDone ? 'border-[#00875A]/40' : 'border-[#DFE1E6]'
+                                            }`}
+                                        >
+                                            {/* Sprint Card Header */}
+                                            <div className={`px-4 py-3 flex items-center justify-between gap-3 ${
+                                                isActive ? 'bg-[#DEEBFF]/40' : isDone ? 'bg-[#E3FCEF]/30' : 'bg-[#F4F5F7]'
+                                            }`}>
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <Zap className={`w-4 h-4 ${isActive ? 'text-[#0052CC]' : 'text-[#5E6C84]'}`} />
+                                                    <h3 className="font-bold text-sm text-[#172B4D] truncate">{sprint.name}</h3>
+                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                                        isActive ? 'bg-[#0052CC] text-white' : isDone ? 'bg-[#00875A] text-white' : 'bg-[#DFE1E6] text-[#42526E]'
+                                                    }`}>
+                                                        {sprint.status || 'planned'} ({progress}%)
+                                                    </span>
+                                                    <span className="text-xs text-[#5E6C84]">({totalCount} items · {pts} pts)</span>
+                                                </div>
+
+                                                <div className="flex items-center gap-2">
+                                                    {!isActive && !isDone && (
+                                                        <>
+                                                            <button onClick={() => handleAutoPlan(sprint.id)} disabled={isPlanning}
+                                                                className="px-2 py-1 text-[11px] font-semibold bg-[#EAE6FF] text-[#403294] hover:bg-[#403294] hover:text-white rounded transition-colors flex items-center gap-1">
+                                                                <Sparkles className="w-3 h-3" /> Auto-plan
+                                                            </button>
+                                                            <button onClick={() => startSprint(sprint.id)}
+                                                                className="px-3 py-1 text-xs font-bold bg-[#0052CC] hover:bg-[#0047B3] text-white rounded transition-colors">
+                                                                Start Sprint
+                                                            </button>
+                                                        </>
                                                     )}
+
+                                                    {isActive && (
+                                                        <button onClick={() => setCompletingSprintId(isCompleting ? null : sprint.id)}
+                                                            className="px-3 py-1 text-xs font-bold bg-[#00875A] hover:bg-[#006644] text-white rounded transition-colors">
+                                                            Complete Sprint
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Sprint Complete Modal Banner */}
+                                            {isCompleting && (
+                                                <div className="p-3 bg-[#FFF0B3] border-b border-[#DFE1E6] text-xs text-[#172B4D] space-y-2">
+                                                    <div className="font-bold">Complete {sprint.name}?</div>
+                                                    <p>{totalCount - doneCount > 0 ? `${totalCount - doneCount} unfinished item(s) will move back to Backlog.` : 'All tasks completed!'}</p>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => completeSprint(sprint.id)} className="px-3 py-1 bg-[#00875A] text-white font-bold rounded text-xs">Confirm</button>
+                                                        <button onClick={() => setCompletingSprintId(null)} className="px-3 py-1 bg-white text-[#5E6C84] border rounded text-xs">Cancel</button>
+                                                    </div>
                                                 </div>
                                             )}
-                                        </Droppable>
-                                    </div>
-                                )
-                            })}
 
-                            {/* Backlog Container */}
-                            <div className="bg-white border border-[#DFE1E6] rounded flex flex-col">
-                                <div className="px-4 py-3 border-b border-[#DFE1E6] flex justify-between items-center bg-[#FAFBFC]">
-                                    <div className="flex items-center gap-3">
-                                        <h2 className="font-semibold text-[14px] text-[#172B4D]">Backlog</h2>
-                                        <span className="text-[12px] text-[#5E6C84]">{backlogIssues.length} issues</span>
-                                    </div>
-                                    <button
-                                        onClick={createSprint}
-                                        className="text-sm bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#172B4D] px-3 py-1 rounded font-medium transition-colors border border-[#DFE1E6]"
-                                    >
-                                        Create sprint
-                                    </button>
-                                </div>
-                                <Droppable droppableId="backlog">
-                                    {(provided, snapshot) => (
-                                        <div
-                                            ref={provided.innerRef}
-                                            {...provided.droppableProps}
-                                            className={`p-2 min-h-[100px] transition-colors ${snapshot.isDraggingOver ? 'bg-[#EBECF0]' : ''}`}
-                                        >
-                                            {backlogIssues.map((issue, index) => (
-                                                <div key={issue.id} className="mb-1">
-                                                    {issue.type === 'task' ? (
-                                                        <TaskCard task={issue.data as Task} index={index} onClick={() => {}} />
-                                                    ) : (
-                                                        <BugCard bug={issue.data as Bug} index={index} onClick={() => {}} />
-                                                    )}
-                                                </div>
-                                            ))}
-                                            {provided.placeholder}
+                                            {/* Droppable Area for Sprint */}
+                                            <Droppable droppableId={sprint.id}>
+                                                {(provided, snapshot) => (
+                                                    <div ref={provided.innerRef} {...provided.droppableProps}
+                                                        className={`p-2 min-h-[50px] transition-colors ${snapshot.isDraggingOver ? 'bg-[#DEEBFF]/30' : 'bg-white'}`}>
+                                                        {sprintIssues.length === 0 ? (
+                                                            <div className="py-4 text-center text-xs text-[#A5ADBA] border border-dashed border-[#DFE1E6] rounded">
+                                                                Drag backlog items here to plan them into {sprint.name}
+                                                            </div>
+                                                        ) : (
+                                                            <div className="space-y-1">
+                                                                {sprintIssues.map((item, index) => (
+                                                                    <IssueRow key={item.id} item={item} index={index} />
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                        {provided.placeholder}
+                                                    </div>
+                                                )}
+                                            </Droppable>
                                         </div>
-                                    )}
-                                </Droppable>
+                                    )
+                                })}
+
+                                {/* UNPLANNED BACKLOG CONTAINER */}
+                                <div className="rounded-lg border-2 border-[#DFE1E6] overflow-hidden bg-white">
+                                    <div className="px-4 py-3 bg-[#F4F5F7] border-b border-[#DFE1E6] flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <ListOrdered className="w-4 h-4 text-[#5E6C84]" />
+                                            <h3 className="font-bold text-xs text-[#172B4D] uppercase tracking-wider">Unplanned Backlog</h3>
+                                            <span className="text-xs font-semibold text-[#5E6C84]">({backlogIssues.length} items)</span>
+                                        </div>
+                                        <span className="text-xs text-[#5E6C84]">Drag items up into a sprint ↑</span>
+                                    </div>
+
+                                    <Droppable droppableId="backlog">
+                                        {(provided, snapshot) => (
+                                            <div ref={provided.innerRef} {...provided.droppableProps}
+                                                className={`p-2 min-h-[100px] transition-colors ${snapshot.isDraggingOver ? 'bg-[#DEEBFF]/30' : 'bg-white'}`}>
+                                                {backlogIssues.length === 0 ? (
+                                                    <div className="py-8 text-center text-xs text-[#A5ADBA]">
+                                                        No unplanned backlog issues. Use <strong>+ Create</strong> in topbar!
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-1">
+                                                        {backlogIssues.map((item, index) => (
+                                                            <IssueRow key={item.id} item={item} index={index} />
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {provided.placeholder}
+                                            </div>
+                                        )}
+                                    </Droppable>
+                                </div>
                             </div>
-                        </div>
-                    </DragDropContext>
+                        </DragDropContext>
+                    </div>
                 </div>
             </div>
         </div>

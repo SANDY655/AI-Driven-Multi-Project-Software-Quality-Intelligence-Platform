@@ -30,7 +30,7 @@ const formSchema = z.object({
     sprint_id: z.string().optional(),
     parent_id: z.string().optional(),
     epic_id: z.string().optional(),
-    story_points: z.number().min(0).max(100).optional(),
+    story_points: z.coerce.number().min(0, 'Story points cannot be negative').max(100, 'Max 100 story points').optional(),
     labels: z.string().optional(),
 })
 
@@ -227,8 +227,7 @@ export function CreateTaskModal({ projectId, projectCode, onSuccess }: CreateTas
                                             <FormLabel className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider mb-1">Labels</FormLabel>
                                             <FormControl>
                                                 <input
-                                                    value={field.value ?? ''}
-                                                    onChange={(event) => field.onChange(event.target.value === '' ? undefined : Number(event.target.value))}
+                                                    {...field}
                                                     placeholder="e.g. backend, database, refactor"
                                                     className={inputClasses}
                                                 />
@@ -298,10 +297,12 @@ export function CreateTaskModal({ projectId, projectCode, onSuccess }: CreateTas
                                                     type="number"
                                                     min="0"
                                                     max="100"
-                                                    {...field}
+                                                    value={field.value ?? 0}
+                                                    onChange={(e) => field.onChange(e.target.value === '' ? 0 : Number(e.target.value))}
                                                     className={inputClasses}
                                                 />
                                             </FormControl>
+                                            <FormMessage className="text-[#DE350B] text-xs" />
                                         </FormItem>
                                     )}
                                 />

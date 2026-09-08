@@ -11,6 +11,8 @@ export function KanbanPage() {
     const { user } = useAuth()
     const [project, setProject] = useState<any>(null)
     const [refreshTrigger, setRefreshTrigger] = useState(0)
+    const [members, setMembers] = useState<any[]>([])
+    const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null)
 
     useEffect(() => {
         if (!id) return
@@ -21,6 +23,15 @@ export function KanbanPage() {
         `).eq('id', id).single().then(({ data }) => {
             if (data) setProject(data)
         })
+
+        // Fetch project members for quick filters
+        supabase
+            .from('project_members')
+            .select(`profiles (id, display_name, avatar_url)`)
+            .eq('project_id', id)
+            .then(({ data }) => {
+                if (data) setMembers(data.map((m: any) => m.profiles).filter(Boolean))
+            })
     }, [id])
 
     if (!id || !project) return null
@@ -45,14 +56,6 @@ export function KanbanPage() {
                     </h1>
                     
                     <div className="flex items-center gap-3">
-                        <div className="flex items-center">
-                            {/* Mock Avatars for filters */}
-                            <div className="flex -space-x-1 mr-4">
-                                <div className="w-8 h-8 rounded-full border-2 border-white bg-[#FF5630] text-white flex items-center justify-center text-xs font-bold z-10">T</div>
-                                <div className="w-8 h-8 rounded-full border-2 border-white bg-[#0052CC] text-white flex items-center justify-center text-xs font-bold z-0">S</div>
-                            </div>
-                        </div>
-
                         {(() => {
                             const userMember = project.project_members?.find((m: any) => m.profiles?.id === user?.id)
                             const userRole = userMember?.project_role
@@ -68,6 +71,42 @@ export function KanbanPage() {
                         })()}
                     </div>
                 </div>
+
+                {/* Quick Filters */}
+                <div className="mt-4 flex items-center gap-4">
+                    <span className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider">Quick Filters</span>
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={() => setAssigneeFilter(null)}
+                            className={`px-3 py-1.5 rounded-[3px] text-sm font-medium transition-colors ${!assigneeFilter ? 'bg-[#DEEBFF] text-[#0052CC]' : 'text-[#42526E] hover:bg-[#EBECF0]'}`}
+                            title="Show all bugs"
+                        >
+                            All
+                        </button>
+                        <div className="w-px h-4 bg-[#DFE1E6] mx-2"></div>
+                        {members.map(member => (
+                            <button
+                                key={member.id}
+                                onClick={() => setAssigneeFilter(assigneeFilter === member.id ? null : member.id)}
+                                className={`p-1 rounded-full transition-all ${assigneeFilter === member.id ? 'ring-2 ring-[#0052CC] ring-offset-1' : 'hover:opacity-80'}`}
+                                title={`Filter by ${member.display_name}`}
+                            >
+                                {member.avatar_url ? (
+                                    <img src={member.avatar_url} className="w-7 h-7 rounded-full" alt={member.display_name} />
+                                ) : (
+                                    <div className="w-7 h-7 rounded-full bg-[#0052CC] text-white flex items-center justify-center text-xs font-bold">
+                                        {member.display_name?.charAt(0)}
+                                    </div>
+                                )}
+                            </button>
+                        ))}
+                        {assigneeFilter && (
+                            <span className="ml-2 text-xs text-[#5E6C84]">
+                                Showing: <span className="font-semibold text-[#0052CC]">{members.find(m => m.id === assigneeFilter)?.display_name}</span>
+                            </span>
+                        )}
+                    </div>
+                </div>
             </div>
 
             {/* Board Container */}
@@ -75,6 +114,7 @@ export function KanbanPage() {
                 <KanbanBoard
                     projectId={id}
                     refreshTrigger={refreshTrigger}
+                    assigneeFilter={assigneeFilter}
                     userRole={project.project_members?.find((m: any) => m.profiles?.id === user?.id)?.project_role}
                 />
             </div>

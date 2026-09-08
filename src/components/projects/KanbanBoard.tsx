@@ -9,6 +9,7 @@ interface KanbanBoardProps {
     projectId: string
     refreshTrigger?: number
     userRole?: string
+    assigneeFilter?: string | null
 }
 
 const COLUMNS = [
@@ -19,7 +20,7 @@ const COLUMNS = [
     { id: 'closed', title: 'DONE' },
 ]
 
-export function KanbanBoard({ projectId, refreshTrigger = 0, userRole }: KanbanBoardProps) {
+export function KanbanBoard({ projectId, refreshTrigger = 0, userRole, assigneeFilter }: KanbanBoardProps) {
     const [bugs, setBugs] = useState<BugType[]>([])
     const [loading, setLoading] = useState(true)
     const navigate = useNavigate()
@@ -92,7 +93,11 @@ export function KanbanBoard({ projectId, refreshTrigger = 0, userRole }: KanbanB
         }
     }
 
-    const getBugsByStatus = (status: string) => bugs.filter(b => b.status === status)
+    const getBugsByStatus = (status: string) => {
+        const statusBugs = bugs.filter(b => b.status === status)
+        if (!assigneeFilter) return statusBugs
+        return statusBugs.filter(b => b.assigned_to === assigneeFilter)
+    }
 
     if (loading) {
         return (

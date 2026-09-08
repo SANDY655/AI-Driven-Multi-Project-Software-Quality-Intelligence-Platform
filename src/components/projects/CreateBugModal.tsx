@@ -32,7 +32,7 @@ const formSchema = z.object({
     assigned_to: z.string().optional().nullable(),
     duplicate_of: z.string().optional().nullable(),
     epic_id: z.string().optional().nullable(),
-    story_points: z.number().min(0).max(100).optional(),
+    story_points: z.coerce.number().min(0, 'Story points cannot be negative').max(100, 'Max 100 story points').optional(),
     labels: z.string().optional(),
     environment: z.string().optional(),
 })
@@ -280,8 +280,7 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                                             <div className="relative">
                                                 <FormControl>
                                                     <Textarea
-                                                        value={field.value ?? ''}
-                                                        onChange={(event) => field.onChange(event.target.value === '' ? undefined : Number(event.target.value))}
+                                                        {...field}
                                                         placeholder="Add a detailed description..."
                                                         className={`${inputClasses} min-h-[150px] resize-y`}
                                                     />
@@ -412,7 +411,11 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                                         render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider mb-1">Epic Link (Optional)</FormLabel>
-                                                <Select onValueChange={field.onChange} defaultValue={field.value || "none"}>
+                                                <Select 
+                                                    onValueChange={(val) => field.onChange(val === 'none' ? null : val)}
+                                                    defaultValue={field.value || "none"}
+                                                    value={field.value || "none"}
+                                                >
                                                     <FormControl>
                                                         <SelectTrigger className={inputClasses}>
                                                             <SelectValue placeholder="None" />
@@ -442,10 +445,12 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                                                         type="number"
                                                         min="0"
                                                         max="100"
-                                                        {...field}
+                                                        value={field.value ?? 0}
+                                                        onChange={(e) => field.onChange(e.target.value === '' ? 0 : Number(e.target.value))}
                                                         className={inputClasses}
                                                     />
                                                 </FormControl>
+                                                <FormMessage className="text-[#DE350B] text-xs" />
                                             </FormItem>
                                         )}
                                     />

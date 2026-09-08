@@ -14,7 +14,12 @@ import {
     ListTodo,
     BarChart2,
     Menu,
-    ChevronLeft
+    ChevronLeft,
+    Plus,
+    CheckSquare,
+    AlertCircle,
+    Activity,
+    Tag
 } from 'lucide-react'
 import {
     DropdownMenu,
@@ -27,6 +32,8 @@ import {
 import { ProfileSettingsModal } from '../projects/ProfileSettingsModal'
 import { useDebounce } from 'use-debounce'
 import { AIChatAssistant } from '../projects/AIChatAssistant'
+import { CreateBugModal } from '../projects/CreateBugModal'
+import { CreateTaskModal } from '../projects/tasks/CreateTaskModal'
 
 interface Project {
     id: string
@@ -57,6 +64,10 @@ export function AppLayout() {
     const navigate = useNavigate()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
+    const [createModalType, setCreateModalType] = useState<'bug' | 'task' | null>(null)
+    const [notifications, setNotifications] = useState<any[]>([])
+    const [notifOpen, setNotifOpen] = useState(false)
+    const [notifLoading, setNotifLoading] = useState(false)
 
     // Search State
     const [searchQuery, setSearchQuery] = useState('')
@@ -88,6 +99,25 @@ export function AppLayout() {
         }
         loadProjects()
     }, [user])
+
+    // Load recent notifications from activity_log
+    useEffect(() => {
+        if (!notifOpen || !user) return
+        setNotifLoading(true)
+        supabase
+            .from('activity_log')
+            .select(`
+                id, action, old_value, new_value, created_at,
+                profiles:user_id (display_name, avatar_url),
+                bugs (bug_display_id, title)
+            `)
+            .order('created_at', { ascending: false })
+            .limit(10)
+            .then(({ data }) => {
+                if (data) setNotifications(data)
+                setNotifLoading(false)
+            })
+    }, [notifOpen, user])
 
     const filteredSearchProjects = projects.filter(p =>
         p.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
@@ -174,9 +204,35 @@ export function AppLayout() {
                             </DropdownMenuContent>
                         </DropdownMenu>
 
-                        <button className="h-8 ml-2 px-3 bg-[#0052CC] hover:bg-[#0047B3] text-white text-sm font-medium rounded transition-colors flex items-center shadow-sm">
-                            Create
-                        </button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild className="outline-none">
+                                <button className="h-8 ml-2 px-3 bg-[#0052CC] hover:bg-[#0047B3] text-white text-sm font-medium rounded transition-colors flex items-center gap-1.5 shadow-sm">
+                                    <Plus className="w-4 h-4" />
+                                    Create
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-56 bg-white border-[#DFE1E6] shadow-md rounded p-1 mt-1">
+                                <DropdownMenuLabel className="text-xs font-bold text-[#5E6C84] uppercase">Create</DropdownMenuLabel>
+                                <DropdownMenuItem
+                                    className="text-sm cursor-pointer py-2 flex items-center gap-2"
+                                    onClick={() => setCreateModalType('bug')}
+                                >
+                                    <div className="w-5 h-5 rounded bg-[#FFEBE6] text-[#DE350B] flex items-center justify-center">
+                                        <AlertCircle className="w-3 h-3" />
+                                    </div>
+                                    {currentProjectId ? 'Bug in this project' : 'Bug report'}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    className="text-sm cursor-pointer py-2 flex items-center gap-2"
+                                    onClick={() => setCreateModalType('task')}
+                                >
+                                    <div className="w-5 h-5 rounded bg-[#E3FCEF] text-[#006644] flex items-center justify-center">
+                                        <CheckSquare className="w-3 h-3" />
+                                    </div>
+                                    {currentProjectId ? 'Task in this project' : 'Task'}
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </nav>
                 </div>
 
@@ -228,11 +284,66 @@ export function AppLayout() {
                         )}
                     </div>
 
-                    <button className="text-[#42526E] hover:text-[#172B4D] hover:bg-[#EBECF0] p-1.5 rounded-full transition-colors relative">
-                        <Bell className="w-5 h-5" />
-                        <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#FF5630] rounded-full border border-white"></span>
-                    </button>
-                    <button className="text-[#42526E] hover:text-[#172B4D] hover:bg-[#EBECF0] p-1.5 rounded-full transition-colors" onClick={() => setIsProfileModalOpen(true)}>
+                    <div className="relative">
+                        <button
+                            className="text-[#42526E] hover:text-[#172B4D] hover:bg-[#EBECF0] p-1.5 rounded-full transition-colors relative"
+                            onClick={() => setNotifOpen(o => !o)}
+                        >
+                            <Bell className="w-5 h-5" />
+                            {notifications.length > 0 && (
+                                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#FF5630] rounded-full border border-white"></span>
+                            )}
+                        </button>
+                        {notifOpen && (
+                            <div className="absolute right-0 top-full mt-2 w-[360px] bg-white border border-[#DFE1E6] shadow-[0_8px_16px_rgba(9,30,66,0.15)] rounded z-50">
+                                <div className="px-4 py-3 border-b border-[#DFE1E6] flex items-center justify-between">
+                                    <span className="font-semibold text-[14px] text-[#172B4D] flex items-center gap-2">
+                                        <Bell className="w-4 h-4" /> Notifications
+                                    </span>
+                                    <button onClick={() => setNotifOpen(false)} className="text-xs text-[#5E6C84] hover:text-[#172B4D]">Close</button>
+                                </div>
+                                <div className="max-h-[380px] overflow-y-auto">
+                                    {notifLoading ? (
+                                        <div className="flex items-center justify-center py-8">
+                                            <Loader2 className="w-5 h-5 animate-spin text-[#0052CC]" />
+                                        </div>
+                                    ) : notifications.length === 0 ? (
+                                        <div className="py-10 text-center text-[#5E6C84] text-sm">
+                                            <Activity className="w-6 h-6 mx-auto mb-2 opacity-40" />
+                                            No recent activity
+                                        </div>
+                                    ) : notifications.map(n => (
+                                        <div key={n.id} className="px-4 py-3 border-b border-[#DFE1E6] hover:bg-[#F4F5F7] flex items-start gap-3">
+                                            {n.profiles?.avatar_url ? (
+                                                <img src={n.profiles.avatar_url} className="w-7 h-7 rounded-full mt-0.5 flex-shrink-0" alt="" />
+                                            ) : (
+                                                <div className="w-7 h-7 rounded-full bg-[#0052CC] text-white flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
+                                                    {n.profiles?.display_name?.charAt(0) || '?'}
+                                                </div>
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm text-[#172B4D]">
+                                                    <span className="font-semibold">{n.profiles?.display_name || 'Someone'}</span>
+                                                    {' '}{n.action.replace(/_/g, ' ')}
+                                                    {n.bugs?.bug_display_id && <span className="text-[#0052CC] font-medium"> on {n.bugs.bug_display_id}</span>}
+                                                </p>
+                                                {n.old_value && n.new_value && (
+                                                    <p className="text-xs text-[#5E6C84] mt-0.5">{n.old_value} → {n.new_value}</p>
+                                                )}
+                                                <p className="text-xs text-[#A5ADBA] mt-1">{new Date(n.created_at).toLocaleString()}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="p-2.5 bg-[#FAFBFC] border-t border-[#DFE1E6] text-center">
+                                    <button onClick={() => { setNotifOpen(false); navigate('/inbox') }} className="text-xs font-bold text-[#0052CC] hover:underline">
+                                        Open Full Inbox & SLA Alerts →
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <button className="text-[#42526E] hover:text-[#172B4D] hover:bg-[#EBECF0] p-1.5 rounded-full transition-colors" onClick={() => navigate('/profile')}>
                         <Settings className="w-5 h-5" />
                     </button>
 
@@ -254,10 +365,14 @@ export function AppLayout() {
                                 </p>
                                 <p className="text-xs text-[#5E6C84] truncate">{user.email}</p>
                             </div>
-                            <DropdownMenuItem className="text-sm text-[#172B4D] cursor-pointer hover:bg-[#F4F5F7] rounded" onClick={() => setIsProfileModalOpen(true)}>
-                                Profile
+                            <DropdownMenuItem className="text-sm text-[#172B4D] cursor-pointer hover:bg-[#F4F5F7] rounded font-medium" onClick={() => navigate('/profile')}>
+                                My Profile & Work
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="text-sm text-[#172B4D] cursor-pointer hover:bg-[#F4F5F7] rounded" onClick={signOut}>
+                            <DropdownMenuItem className="text-sm text-[#172B4D] cursor-pointer hover:bg-[#F4F5F7] rounded" onClick={() => navigate('/inbox')}>
+                                Notifications Inbox
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="text-sm text-[#DE350B] cursor-pointer hover:bg-[#FFEBE6] rounded" onClick={signOut}>
                                 Log out
                             </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -310,6 +425,13 @@ export function AppLayout() {
                                         <Menu className="w-4 h-4" />
                                         Backlog
                                     </Link>
+                                    <Link 
+                                        to={`/projects/${currentProjectId}/timeline`}
+                                        className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${location.pathname.endsWith('/timeline') ? 'bg-[#E9F2FF] text-[#0052CC]' : 'text-[#42526E] hover:bg-[#EBECF0]'}`}
+                                    >
+                                        <Activity className="w-4 h-4" />
+                                        Timeline
+                                    </Link>
                                     
                                     <div className="px-3 py-2 text-xs font-bold text-[#5E6C84] uppercase tracking-wider mb-1 mt-4">Development</div>
                                     <Link 
@@ -325,6 +447,13 @@ export function AppLayout() {
                                     >
                                         <BarChart2 className="w-4 h-4" />
                                         Reports
+                                    </Link>
+                                    <Link 
+                                        to={`/projects/${currentProjectId}/releases`}
+                                        className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${location.pathname.endsWith('/releases') ? 'bg-[#E9F2FF] text-[#0052CC]' : 'text-[#42526E] hover:bg-[#EBECF0]'}`}
+                                    >
+                                        <Tag className="w-4 h-4" />
+                                        Releases
                                     </Link>
                                 </nav>
                                 
@@ -360,6 +489,31 @@ export function AppLayout() {
                 user={user}
                 profile={profile}
             />
+
+            {/* Global Create Modals — only work when inside a project */}
+            {createModalType === 'bug' && currentProjectId && currentProject && (
+                <CreateBugModal
+                    projectId={currentProjectId}
+                    projectCode={currentProject.project_code}
+                    onSuccess={() => setCreateModalType(null)}
+                />
+            )}
+            {createModalType === 'task' && currentProjectId && currentProject && (
+                <CreateTaskModal
+                    projectId={currentProjectId}
+                    projectCode={currentProject.project_code}
+                    onSuccess={() => setCreateModalType(null)}
+                />
+            )}
+            {createModalType && !currentProjectId && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setCreateModalType(null)}>
+                    <div className="bg-white rounded shadow-lg p-8 max-w-sm w-full text-center" onClick={e => e.stopPropagation()}>
+                        <p className="text-[#172B4D] font-medium mb-2">Select a project first</p>
+                        <p className="text-[#5E6C84] text-sm mb-4">Navigate into a project to create bugs or tasks.</p>
+                        <button onClick={() => setCreateModalType(null)} className="px-4 py-2 bg-[#0052CC] text-white rounded text-sm font-medium hover:bg-[#0047B3]">OK</button>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

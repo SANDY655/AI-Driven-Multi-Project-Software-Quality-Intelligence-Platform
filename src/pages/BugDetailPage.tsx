@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
-import { ArrowUp, ArrowDown, Minus, ArrowRight, User as UserIcon, GitCommit, Trash2, Edit2, Share2, MoreHorizontal } from 'lucide-react'
+import { ArrowUp, ArrowDown, Minus, ArrowRight, User as UserIcon, GitCommit, Trash2, Edit2, Share2, MoreHorizontal, Copy, ExternalLink } from 'lucide-react'
 import { BugComments } from '@/components/projects/bugs/BugComments'
+import { BugActivityTimeline } from '@/components/projects/bugs/BugActivityTimeline'
 import { BugDetailsModal } from '@/components/projects/BugDetailsModal'
+import { SubTasksChecklist } from '@/components/projects/SubTasksChecklist'
 
 export function BugDetailPage() {
     const { id: projectId, bugId } = useParams<{ id: string, bugId: string }>()
@@ -16,6 +18,9 @@ export function BugDetailPage() {
     const [loading, setLoading] = useState(true)
     const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
     const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+    const [activeTab, setActiveTab] = useState<'comments' | 'history'>('comments')
+    const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+    const moreMenuRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         const fetchDetails = async () => {
@@ -128,6 +133,21 @@ export function BugDetailPage() {
         alert('Link copied to clipboard!')
     }
 
+    const handleCopyId = () => {
+        navigator.clipboard.writeText(bug.bug_display_id)
+        setMoreMenuOpen(false)
+    }
+
+    const handleCopyLink = () => {
+        navigator.clipboard.writeText(window.location.href)
+        setMoreMenuOpen(false)
+    }
+
+    const handleOpenNewTab = () => {
+        window.open(window.location.href, '_blank')
+        setMoreMenuOpen(false)
+    }
+
     const handleUpdate = () => {
         // Refresh bug data when modal updates
         window.location.reload()
@@ -172,9 +192,39 @@ export function BugDetailPage() {
                             <Trash2 className="w-4 h-4" /> Delete
                         </button>
                     )}
-                    <button className="bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#42526E] border border-[#DFE1E6] px-2 py-1.5 rounded text-sm font-medium transition-colors">
-                        <MoreHorizontal className="w-4 h-4" />
-                    </button>
+                    <div ref={moreMenuRef} className="relative">
+                        <button
+                            onClick={() => setMoreMenuOpen(o => !o)}
+                            className="bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#42526E] border border-[#DFE1E6] px-2 py-1.5 rounded text-sm font-medium transition-colors"
+                        >
+                            <MoreHorizontal className="w-4 h-4" />
+                        </button>
+                        {moreMenuOpen && (
+                            <div className="absolute right-0 top-full mt-1 w-[200px] bg-white border border-[#DFE1E6] shadow-[0_4px_8px_rgba(9,30,66,0.15)] rounded z-50 py-1">
+                                <button
+                                    onClick={handleCopyId}
+                                    className="w-full text-left px-3 py-2 text-sm text-[#172B4D] hover:bg-[#F4F5F7] flex items-center gap-2"
+                                >
+                                    <Copy className="w-4 h-4 text-[#5E6C84]" />
+                                    Copy bug ID
+                                </button>
+                                <button
+                                    onClick={handleCopyLink}
+                                    className="w-full text-left px-3 py-2 text-sm text-[#172B4D] hover:bg-[#F4F5F7] flex items-center gap-2"
+                                >
+                                    <Share2 className="w-4 h-4 text-[#5E6C84]" />
+                                    Copy link
+                                </button>
+                                <button
+                                    onClick={handleOpenNewTab}
+                                    className="w-full text-left px-3 py-2 text-sm text-[#172B4D] hover:bg-[#F4F5F7] flex items-center gap-2"
+                                >
+                                    <ExternalLink className="w-4 h-4 text-[#5E6C84]" />
+                                    Open in new tab
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -192,10 +242,31 @@ export function BugDetailPage() {
                     {/* Activity Section */}
                     <div>
                         <div className="flex items-center gap-4 mb-4 border-b border-[#DFE1E6]">
-                            <button className="pb-2 border-b-2 border-[#0052CC] font-medium text-sm text-[#0052CC]">Comments</button>
-                            <button className="pb-2 border-b-2 border-transparent font-medium text-sm text-[#5E6C84] hover:text-[#172B4D]">History</button>
+                            <button
+                                onClick={() => setActiveTab('comments')}
+                                className={`pb-2 border-b-2 font-medium text-sm transition-colors ${
+                                    activeTab === 'comments'
+                                        ? 'border-[#0052CC] text-[#0052CC]'
+                                        : 'border-transparent text-[#5E6C84] hover:text-[#172B4D]'
+                                }`}
+                            >
+                                Comments
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('history')}
+                                className={`pb-2 border-b-2 font-medium text-sm transition-colors ${
+                                    activeTab === 'history'
+                                        ? 'border-[#0052CC] text-[#0052CC]'
+                                        : 'border-transparent text-[#5E6C84] hover:text-[#172B4D]'
+                                }`}
+                            >
+                                History
+                            </button>
                         </div>
-                        <BugComments bugId={bugId!} />
+                        {activeTab === 'comments'
+                            ? <BugComments bugId={bugId!} />
+                            : <BugActivityTimeline bugId={bugId!} />
+                        }
                     </div>
                 </div>
 
@@ -249,6 +320,8 @@ export function BugDetailPage() {
                             </div>
                         </div>
                     </div>
+
+                    <SubTasksChecklist issueId={bug.id} />
 
                     <div className="border border-[#DFE1E6] rounded">
                         <div className="p-4 border-b border-[#DFE1E6] bg-[#FAFBFC] rounded-t font-medium text-[#172B4D] text-sm">
