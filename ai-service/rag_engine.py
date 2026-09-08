@@ -294,17 +294,29 @@ JSON Response:"""
         response.raise_for_status()
         response_text = response.json()["response"]
         
+        def validate_result(res: dict) -> dict:
+            rec_id = res.get("recommended_developer_id")
+            if project_members:
+                valid_ids = [m.get("user_id") for m in project_members]
+                if rec_id not in valid_ids:
+                    res["recommended_developer_id"] = "00000000-0000-0000-0000-000000000000"
+                    if rec_id != "00000000-0000-0000-0000-000000000000":
+                        res["rationale"] = f"Original recommendation was invalid ({rec_id}). " + res.get("rationale", "")
+            else:
+                res["recommended_developer_id"] = "00000000-0000-0000-0000-000000000000"
+            return res
+
         # Extract JSON from response
         try:
             result = json.loads(response_text)
-            return result
+            return validate_result(result)
         except json.JSONDecodeError:
             # Try to extract JSON from the response text
             json_start = response_text.find('{')
             json_end = response_text.rfind('}') + 1
             if json_start >= 0 and json_end > json_start:
                 result = json.loads(response_text[json_start:json_end])
-                return result
+                return validate_result(result)
             # Fallback response
             return {
                 "recommended_developer_id": "00000000-0000-0000-0000-000000000000",
