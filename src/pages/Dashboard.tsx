@@ -1,10 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { CreateProjectModal } from '../components/projects/CreateProjectModal'
-import { FolderGit2, Lock, ArrowUpRight, CircleDashed, Briefcase, Flame, User, MoreVertical, Radar, Network, Bot } from 'lucide-react'
-import { aiClient } from '../lib/ai-client'
+import { FolderGit2, CircleDashed, Briefcase, CheckCircle2, AlertCircle, Clock } from 'lucide-react'
 
 interface Profile {
     display_name: string
@@ -20,22 +19,28 @@ interface Project {
     description: string
     github_repo: string
     github_owner: string
-    github_details: {
-        private?: boolean;
-        description?: string;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        [key: string]: any; // Allow other properties but strongly type the ones we use
-    }
     updated_at: string
+}
+
+interface AssignedItem {
+    id: string;
+    display_id: string;
+    title: string;
+    type: 'bug' | 'task';
+    project_code: string;
+    project_id: string;
+    status: string;
+    updated_at: string;
 }
 
 export function Dashboard() {
     const { user } = useAuth()
+    const navigate = useNavigate()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [projects, setProjects] = useState<Project[]>([])
+    const [assignedItems, setAssignedItems] = useState<AssignedItem[]>([])
     const [loading, setLoading] = useState(true)
-    const [aiTesting, setAiTesting] = useState(false)
-    const [isBackfilling, setIsBackfilling] = useState(false)
+    const [activeTab, setActiveTab] = useState<'recent' | 'assigned'>('recent')
 
     const loadData = useCallback(async () => {
         if (!user) return
@@ -50,15 +55,65 @@ export function Dashboard() {
         if (profileData) setProfile(profileData)
 
         // Load projects this user is a member of
-        const { data: projectsData, error } = await supabase
+        const { data: projectsData, error: projErr } = await supabase
             .from('projects')
             .select('*, project_members!inner(project_id)')
             .eq('project_members.user_id', user.id)
             .order('updated_at', { ascending: false })
 
-        if (projectsData && !error) {
+        if (projectsData && !projErr) {
             setProjects(projectsData)
         }
+
+        // Load Assigned Bugs
+        const { data: bugs } = await supabase
+            .from('bugs')
+            .select('id, bug_display_id, title, status, updated_at, projects(id, project_code)')
+            .eq('assigned_to', user.id)
+            .neq('status', 'resolved')
+            .neq('status', 'closed')
+            .order('updated_at', { ascending: false })
+            .limit(10)
+            
+        // Load Assigned Tasks
+        const { data: tasks } = await supabase
+            .from('tasks')
+            .select('id, task_display_id, title, status, updated_at, projects(id, project_code)')
+            .eq('assigned_to', user.id)
+            .neq('status', 'done')
+            .order('updated_at', { ascending: false })
+            .limit(10)
+
+        const combined: AssignedItem[] = []
+        if (bugs) {
+            bugs.forEach((b: any) => combined.push({
+                id: b.id,
+                display_id: b.bug_display_id,
+                title: b.title,
+                type: 'bug',
+                project_code: b.projects?.project_code || 'UNK',
+                project_id: b.projects?.id,
+                status: b.status,
+                updated_at: b.updated_at
+            }))
+        }
+        if (tasks) {
+            tasks.forEach((t: any) => combined.push({
+                id: t.id,
+                display_id: t.task_display_id,
+                title: t.title,
+                type: 'task',
+                project_code: t.projects?.project_code || 'UNK',
+                project_id: t.projects?.id,
+                status: t.status,
+                updated_at: t.updated_at
+            }))
+        }
+
+        // Sort combined by updated_at
+        combined.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+        setAssignedItems(combined)
+
         setLoading(false)
     }, [user])
 
@@ -66,307 +121,160 @@ export function Dashboard() {
         loadData()
     }, [loadData])
 
-    const totalOpenBugs = 0 // Placeholder logic for now
 
-    // Helper for profile initials
-    const getInitials = () => {
-        if (profile?.display_name) return profile.display_name.charAt(0).toUpperCase()
-        if (user?.email) return user.email.charAt(0).toUpperCase()
-        return '?'
+    if (loading) {
+        return (
+            <div className="flex-1 p-8 text-[#172B4D] animate-pulse">
+                <div className="h-8 bg-[#EBECF0] w-48 rounded mb-6"></div>
+                <div className="flex gap-4 mb-6">
+                    <div className="h-6 bg-[#EBECF0] w-24 rounded"></div>
+                    <div className="h-6 bg-[#EBECF0] w-24 rounded"></div>
+                </div>
+                <div className="space-y-4">
+                    <div className="h-16 bg-[#EBECF0] rounded"></div>
+                    <div className="h-16 bg-[#EBECF0] rounded"></div>
+                    <div className="h-16 bg-[#EBECF0] rounded"></div>
+                </div>
+            </div>
+        )
     }
 
-    const getGreeting = () => {
-        const hour = new Date().getHours()
-        if (hour < 12) return 'Good morning'
-        if (hour < 18) return 'Good afternoon'
-        return 'Good evening'
-    }
+    const getStatusBadge = (status: string, type: 'bug' | 'task') => {
+        const normalizedStatus = status.toLowerCase();
+        let bg = 'bg-[#DFE1E6]';
+        let text = 'text-[#42526E]';
 
-    const testAIEngine = async () => {
-        setAiTesting(true);
-        try {
-            const response = await aiClient.analyzeBug({
-                title: "App crashes on login",
-                description: "When I click the login button with a valid email, the screen goes white and crashes.",
-                project_id: projects.length > 0 ? projects[0].id : null
-            });
-            alert(`AI Prediction:\nPriority: ${response.prediction.priority}\nSeverity: ${response.prediction.severity}\n\nRationale:\n${response.prediction.rationale}`);
-        } catch (error) {
-            console.error("AI test failed:", error);
-            alert("AI test failed. Make sure the Python server is running on port 8000!");
-        } finally {
-            setAiTesting(false);
+        if (normalizedStatus.includes('progress')) {
+            bg = 'bg-[#E1ECFA]';
+            text = 'text-[#0052CC]';
+        } else if (normalizedStatus.includes('resolved') || normalizedStatus.includes('done') || normalizedStatus.includes('closed')) {
+            bg = 'bg-[#E3FCEF]';
+            text = 'text-[#006644]';
         }
+
+        return (
+            <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider ${bg} ${text}`}>
+                {status.replace('_', ' ')}
+            </span>
+        )
     }
-
-    const handleBackfill = async () => {
-        setIsBackfilling(true);
-        try {
-            const { data: bugs, error: bugsErr } = await supabase.from('bugs').select('id, title, description, project_id');
-            if (bugsErr) throw bugsErr;
-            
-            const { data: tasks, error: tasksErr } = await supabase.from('tasks').select('id, title, description, project_id');
-            if (tasksErr) throw tasksErr;
-
-            let bugCount = 0;
-            let taskCount = 0;
-
-            for (const bug of bugs || []) {
-                await aiClient.embedBug(bug.id, {
-                    title: bug.title,
-                    description: bug.description || '',
-                    project_id: bug.project_id
-                });
-                bugCount++;
-            }
-
-            for (const task of tasks || []) {
-                await aiClient.embedTask(task.id, {
-                    title: task.title,
-                    description: task.description || ''
-                });
-                taskCount++;
-            }
-
-            alert(`AI Embeddings Backfill Complete!\nSuccessfully embedded ${bugCount} bugs and ${taskCount} tasks.`);
-        } catch (error) {
-            console.error("Backfill failed:", error);
-            alert("Backfill failed. Please ensure the Python FastAPI server is running on port 8000!");
-        } finally {
-            setIsBackfilling(false);
-        }
-    }
-
 
     return (
-        <div className="flex flex-col xl:flex-row gap-8 min-h-full font-sans pb-8 -mt-2">
+        <div className="flex-1 max-w-5xl mx-auto w-full px-6 py-10 text-[#172B4D]">
+            <div className="flex items-center justify-between mb-8">
+                <h1 className="text-[24px] font-medium tracking-tight text-[#172B4D]">Your work</h1>
+                <CreateProjectModal onSuccess={loadData} />
+            </div>
 
-            {/* Main Left Content */}
-            <div className="flex-1 min-w-0 space-y-8">
+            {/* Tabs */}
+            <div className="flex items-center gap-6 border-b border-[#DFE1E6] mb-6">
+                <button 
+                    onClick={() => setActiveTab('recent')}
+                    className={`pb-3 font-medium text-sm transition-colors relative ${activeTab === 'recent' ? 'text-[#0052CC]' : 'text-[#5E6C84] hover:text-[#172B4D]'}`}
+                >
+                    Recent projects
+                    {activeTab === 'recent' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#0052CC] rounded-t"></div>}
+                </button>
+                <button 
+                    onClick={() => setActiveTab('assigned')}
+                    className={`pb-3 font-medium text-sm transition-colors relative ${activeTab === 'assigned' ? 'text-[#0052CC]' : 'text-[#5E6C84] hover:text-[#172B4D]'}`}
+                >
+                    Assigned to me <span className="ml-1.5 bg-[#EBECF0] text-[#42526E] px-1.5 py-0.5 rounded-full text-xs">{assignedItems.length}</span>
+                    {activeTab === 'assigned' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#0052CC] rounded-t"></div>}
+                </button>
+            </div>
 
-                {/* AI Testing Card - MOVED TO TOP FOR VISIBILITY */}
-                <div className="bg-indigo-50 rounded-[24px] p-6 shadow-sm border border-indigo-200 flex flex-col md:flex-row items-center justify-between text-left gap-6">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0">
-                            <Bot className="w-6 h-6" />
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-bold text-indigo-900 mb-1">Test AI Engine (RAG)</h3>
-                            <p className="text-sm text-indigo-700/80 m-0">Run a mock bug through the local RAG engine to test Priority and Severity prediction.</p>
-                        </div>
-                    </div>
-                    <div className="flex flex-wrap gap-3">
-                        <button 
-                            onClick={testAIEngine}
-                            disabled={aiTesting || isBackfilling}
-                            className="py-3 px-6 bg-[#634AF9] hover:bg-[#523AE0] text-white rounded-xl font-semibold transition-colors disabled:opacity-50 whitespace-nowrap shadow-sm cursor-pointer"
-                        >
-                            {aiTesting ? 'Analyzing...' : 'Run Test Analysis'}
-                        </button>
-                        <button 
-                            onClick={handleBackfill}
-                            disabled={aiTesting || isBackfilling}
-                            className="py-3 px-6 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold transition-colors disabled:opacity-50 whitespace-nowrap shadow-sm cursor-pointer"
-                        >
-                            {isBackfilling ? 'Backfilling...' : 'Backfill AI Embeddings'}
-                        </button>
-                    </div>
-                </div>
-
-                {/* Hero Banner */}
-                <div className="relative overflow-hidden rounded-[32px] bg-[#634AF9] text-white p-8 md:p-10 shadow-lg w-full flex flex-col justify-center min-h-[220px]">
-                    {/* Decorative Tracking Style Background */}
-                    <div className="absolute inset-0 opacity-[0.15] pointer-events-none" style={{ backgroundImage: 'radial-gradient(white 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
-                    <div className="absolute top-0 right-0 w-full h-full overflow-hidden pointer-events-none opacity-30">
-                        <Radar className="absolute -right-[5%] -top-[10%] w-[350px] h-[350px] text-white" strokeWidth={0.5} />
-                        <Network className="absolute right-[30%] bottom-[5%] w-32 h-32 text-white/40" strokeWidth={1} />
-                    </div>
-
-                    <div className="relative z-10 max-w-2xl">
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/20 backdrop-blur-md text-[10px] font-bold tracking-widest uppercase text-white mb-5 border border-white/10">
-                            BUGTRACKER WORKSPACE
-                        </div>
-                        <h1 className="text-3xl md:text-[40px] font-semibold mb-6 leading-[1.15] tracking-tight">
-                            Streamline your workflow with <br /> Professional Bug Tracking
-                        </h1>
-                        <div className="flex items-center gap-4">
-                            <CreateProjectModal onSuccess={loadData} />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Quick Stats Pills */}
-                <div className="flex flex-wrap gap-4">
-                    {/* Active Projects Pill */}
-                    <div className="bg-white rounded-[24px] p-2.5 pr-6 shadow-sm border border-zinc-100 flex items-center gap-4 cursor-default">
-                        <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 flex-shrink-0">
-                            <Briefcase className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-0.5">Active Projects</p>
-                            <div className="flex items-center gap-2">
-                                <span className="text-lg font-bold text-zinc-900 leading-none">{projects.length}</span>
-                                <span className="text-xs font-medium text-zinc-500">total</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Open Bugs Pill */}
-                    <div className="bg-white rounded-[24px] p-2.5 pr-6 shadow-sm border border-zinc-100 flex items-center gap-4 cursor-default">
-                        <div className="w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 flex-shrink-0">
-                            <CircleDashed className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-0.5">Open Bugs</p>
-                            <div className="flex items-center gap-2">
-                                <span className="text-lg font-bold text-zinc-900 leading-none">{totalOpenBugs}</span>
-                                <span className="text-xs font-medium text-zinc-500">issues</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Projects Section */}
-                <div>
-                    <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-[22px] font-bold text-zinc-900 tracking-tight">Your Projects</h2>
-                    </div>
-
-                    {loading ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            <div className="animate-pulse h-64 bg-white rounded-[32px] border border-zinc-100 shadow-sm"></div>
-                            <div className="animate-pulse h-64 bg-white rounded-[32px] border border-zinc-100 shadow-sm"></div>
-                        </div>
-                    ) : projects.length === 0 ? (
-                        <div className="bg-white rounded-[32px] border border-zinc-100 shadow-sm min-h-[300px] flex items-center justify-center p-8">
-                            <div className="text-center text-zinc-500 max-w-sm">
-                                <div className="bg-zinc-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
-                                    <FolderGit2 className="h-10 w-10 text-zinc-400" />
-                                </div>
-                                <h3 className="text-xl font-bold text-zinc-900 mb-2">No projects yet</h3>
-                                <p className="text-sm text-zinc-500 leading-relaxed mb-6">
-                                    Get started by creating your first project to organize your team's workflow and bugs.
-                                </p>
-                                <CreateProjectModal onSuccess={loadData} />
-                            </div>
+            {/* Tab Content */}
+            {activeTab === 'recent' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {projects.length === 0 ? (
+                        <div className="col-span-full py-16 flex flex-col items-center justify-center text-center border-2 border-dashed border-[#DFE1E6] rounded-lg">
+                            <FolderGit2 className="w-12 h-12 text-[#N30] mb-4 text-[#A5ADBA]" />
+                            <h3 className="text-lg font-medium text-[#172B4D] mb-2">No projects yet</h3>
+                            <p className="text-sm text-[#5E6C84] mb-6">You don't have any recent projects.</p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {projects.map((project) => (
-                                <Link
-                                    key={project.id}
-                                    to={`/projects/${project.id}`}
-                                    className="group block bg-white border border-zinc-100 rounded-[32px] p-6 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 block h-full flex flex-col relative overflow-hidden"
-                                >
-                                    {/* Abstract top background instead of an image cover */}
-                                    <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-br from-indigo-50 to-blue-50/20 opacity-50 pointer-events-none"></div>
-
-                                    <div className="relative z-10 flex flex-col h-full">
-                                        <div className="flex items-start justify-between mb-4">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="inline-flex items-center text-[10px] font-bold uppercase tracking-widest bg-indigo-100/80 text-indigo-700 px-2.5 py-1 rounded-md">
-                                                    {project.project_code}
-                                                </span>
-                                                {project.github_details?.private && (
-                                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest bg-zinc-100 text-zinc-600 px-2.5 py-1 rounded-md">
-                                                        <Lock className="h-3 w-3" /> Private
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <h3 className="text-[19px] font-bold text-zinc-900 mb-2 group-hover:text-[#634AF9] transition-colors line-clamp-2 leading-snug">
+                        projects.map((project) => (
+                            <Link
+                                key={project.id}
+                                to={`/projects/${project.id}`}
+                                className="group bg-white border border-[#DFE1E6] rounded p-4 hover:shadow-[0_1px_4px_rgba(9,30,66,0.15)] transition-all block"
+                            >
+                                <div className="flex items-start gap-3">
+                                    <div className="w-10 h-10 rounded bg-[#EAE6FF] text-[#403294] flex items-center justify-center font-bold text-sm flex-shrink-0">
+                                        {project.project_code.substring(0,2)}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <h3 className="text-[16px] font-medium text-[#172B4D] mb-1 group-hover:text-[#0052CC] transition-colors truncate">
                                             {project.name}
                                         </h3>
-
-                                        <p className="text-zinc-500 text-sm mb-6 line-clamp-2 leading-relaxed flex-grow">
-                                            {project.github_details?.description || 'No description provided for this repository.'}
-                                        </p>
-
-                                        {/* Bottom Action Bar (Mentor equivalent) */}
-                                        <div className="flex items-center justify-between text-[13px] font-bold text-zinc-500 mt-auto pt-4 border-t border-zinc-100/80">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-6 h-6 rounded-full bg-zinc-100 flex items-center justify-center overflow-hidden">
-                                                    {project.github_owner ? (
-                                                        <img src={`https://github.com/${project.github_owner}.png`} alt={project.github_owner} className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <User className="w-3.5 h-3.5 text-zinc-400" />
-                                                    )}
-                                                </div>
-                                                <span className="truncate max-w-[120px] text-zinc-700 font-semibold">{project.github_owner}</span>
-                                            </div>
-                                            <div className="w-8 h-8 rounded-full border border-zinc-200 flex items-center justify-center group-hover:bg-[#634AF9] group-hover:border-[#634AF9] group-hover:text-white text-zinc-400 transition-colors">
-                                                <ArrowUpRight className="w-4 h-4" />
-                                            </div>
-                                        </div>
+                                        <p className="text-xs text-[#5E6C84]">Software project</p>
                                     </div>
-                                </Link>
-                            ))}
-                        </div>
+                                </div>
+                                <div className="mt-4 pt-3 border-t border-[#DFE1E6] flex items-center gap-4">
+                                    <div className="flex items-center gap-1.5 text-xs text-[#5E6C84]">
+                                        <Briefcase className="w-3.5 h-3.5" />
+                                        {project.project_code}
+                                    </div>
+                                </div>
+                            </Link>
+                        ))
                     )}
                 </div>
-            </div>
+            )}
 
-            {/* Right Sidebar */}
-            <div className="w-full xl:w-[320px] flex-shrink-0 space-y-8">
-                {/* Overview Card */}
-                <div className="bg-white rounded-[32px] p-8 shadow-sm border border-zinc-100 flex flex-col items-center text-center">
-                    <div className="w-full flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-bold text-zinc-900">Overview</h3>
-                        <div className="w-8 h-8 rounded-full bg-zinc-50 flex items-center justify-center cursor-pointer hover:bg-zinc-100 text-zinc-400">
-                            <MoreVertical className="w-4 h-4" />
+            {activeTab === 'assigned' && (
+                <div className="bg-white border border-[#DFE1E6] rounded">
+                    {assignedItems.length === 0 ? (
+                        <div className="py-16 flex flex-col items-center justify-center text-center">
+                            <CheckCircle2 className="w-12 h-12 text-[#36B37E] mb-4" />
+                            <h3 className="text-lg font-medium text-[#172B4D] mb-2">You're all caught up</h3>
+                            <p className="text-sm text-[#5E6C84]">There are no issues assigned to you.</p>
                         </div>
-                    </div>
-
-                    <div className="relative mb-5">
-                        {/* Circular Progress Placeholder Ring */}
-                        <svg className="absolute -inset-2 w-28 h-28 text-indigo-100" viewBox="0 0 100 100">
-                            <circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" strokeWidth="4" />
-                        </svg>
-                        <svg className="absolute -inset-2 w-28 h-28 text-indigo-500 -rotate-90" viewBox="0 0 100 100">
-                            <circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" strokeWidth="4" strokeDasharray="289" strokeDashoffset="60" className="drop-shadow-sm" />
-                        </svg>
-
-                        <div className="w-24 h-24 rounded-full overflow-hidden flex-shrink-0 shadow-md ring-4 ring-white relative z-10 bg-zinc-100">
-                            {profile?.avatar_url ? (
-                                <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
-                            ) : (
-                                <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-zinc-400">
-                                    {getInitials()}
-                                </div>
-                            )}
-                        </div>
-                        {/* Progress Badge */}
-                        <div className="absolute -top-3 -right-3 bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full z-20 shadow-sm border-2 border-white">
-                            PRO
-                        </div>
-                    </div>
-
-                    <h2 className="text-xl font-bold text-zinc-900 mb-1 flex items-center justify-center gap-1.5">
-                        {getGreeting()}, {profile?.github_username || profile?.display_name?.split(' ')[0] || user?.email?.split('@')[0] || 'User'} <Flame className="w-5 h-5 text-orange-500 fill-orange-500" />
-                    </h2>
-                    <p className="text-sm text-zinc-500 leading-relaxed mb-6 px-2">
-                        Continue managing your projects and resolving bugs efficiently!
-                    </p>
-
-                    <div className="w-full h-px bg-zinc-100 my-2"></div>
-
-                    {/* Simple summary stats instead of a chart since we don't have chart data */}
-                    <div className="w-full grid grid-cols-2 gap-4 mt-6">
-                        <div className="bg-zinc-50 rounded-2xl p-4 text-center border border-zinc-100/50">
-                            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">Projects</p>
-                            <p className="text-xl font-bold text-zinc-900">{projects.length}</p>
-                        </div>
-                        <div className="bg-zinc-50 rounded-2xl p-4 text-center border border-zinc-100/50">
-                            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">Role</p>
-                            <p className="text-sm font-bold text-indigo-600 capitalize mt-1 truncate">{profile?.role || 'Member'}</p>
-                        </div>
-                    </div>
+                    ) : (
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-[#DFE1E6]">
+                                    <th className="py-2.5 px-4 text-xs font-bold text-[#5E6C84] uppercase tracking-wider w-8">T</th>
+                                    <th className="py-2.5 px-4 text-xs font-bold text-[#5E6C84] uppercase tracking-wider w-24">Key</th>
+                                    <th className="py-2.5 px-4 text-xs font-bold text-[#5E6C84] uppercase tracking-wider">Summary</th>
+                                    <th className="py-2.5 px-4 text-xs font-bold text-[#5E6C84] uppercase tracking-wider w-32">Status</th>
+                                    <th className="py-2.5 px-4 text-xs font-bold text-[#5E6C84] uppercase tracking-wider w-32 text-right">Updated</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {assignedItems.map(item => (
+                                    <tr key={item.id} className="border-b border-[#DFE1E6] last:border-0 hover:bg-[#FAFBFC] transition-colors group cursor-pointer" onClick={() => navigate(`/projects/${item.project_id}/${item.type === 'bug' ? `bugs/${item.id}` : 'board'}`)}>
+                                        <td className="py-2.5 px-4">
+                                            {item.type === 'bug' ? (
+                                                <div className="w-5 h-5 rounded bg-[#FFEBE6] text-[#DE350B] flex items-center justify-center" title="Bug">
+                                                    <AlertCircle className="w-3.5 h-3.5" />
+                                                </div>
+                                            ) : (
+                                                <div className="w-5 h-5 rounded bg-[#E6FCFF] text-[#00B8D9] flex items-center justify-center" title="Task">
+                                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td className="py-2.5 px-4 text-sm font-medium text-[#5E6C84] group-hover:text-[#0052CC]">
+                                            {item.display_id}
+                                        </td>
+                                        <td className="py-2.5 px-4 text-sm text-[#172B4D] font-medium">
+                                            {item.title}
+                                        </td>
+                                        <td className="py-2.5 px-4">
+                                            {getStatusBadge(item.status, item.type)}
+                                        </td>
+                                        <td className="py-2.5 px-4 text-xs text-[#5E6C84] text-right">
+                                            {new Date(item.updated_at).toLocaleDateString()}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
                 </div>
-
-            </div>
-
+            )}
         </div>
     )
 }
-

@@ -8,7 +8,6 @@ import { aiClient } from '@/lib/ai-client'
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
@@ -23,9 +22,8 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Loader2, Bug, Sparkles, AlertTriangle, ArrowLeft } from 'lucide-react'
+import { Loader2, Bug, Sparkles, AlertTriangle, ArrowUp, ArrowDown, Minus, ArrowRight } from 'lucide-react'
 
 const formSchema = z.object({
     title: z.string().min(5, 'Title must be at least 5 characters.'),
@@ -34,6 +32,10 @@ const formSchema = z.object({
     priority: z.enum(['P0', 'P1', 'P2', 'P3']),
     assigned_to: z.string().optional().nullable(),
     duplicate_of: z.string().optional().nullable(),
+    epic_id: z.string().optional().nullable(),
+    story_points: z.coerce.number().min(0).max(100).optional(),
+    labels: z.string().optional(),
+    environment: z.string().optional(),
 })
 
 interface CreateBugModalProps {
@@ -48,6 +50,7 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
     const [loading, setLoading] = useState(false)
     const [isAnalyzing, setIsAnalyzing] = useState(false)
     const [projectMembers, setProjectMembers] = useState<{ id: string, name: string }[]>([])
+    const [epics, setEpics] = useState<any[]>([])
     const [aiDuplicates, setAiDuplicates] = useState<any[]>([])
     const [aiRationale, setAiRationale] = useState('')
     const [aiAssigneeRationale, setAiAssigneeRationale] = useState('')
@@ -62,7 +65,11 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
             severity: 'medium',
             priority: 'P2',
             assigned_to: null,
-            duplicate_of: null
+            duplicate_of: null,
+            epic_id: null,
+            story_points: 0,
+            labels: '',
+            environment: '',
         },
     })
 
@@ -75,7 +82,11 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                 severity: 'medium',
                 priority: 'P2',
                 assigned_to: null,
-                duplicate_of: null
+                duplicate_of: null,
+                epic_id: null,
+                story_points: 0,
+                labels: '',
+                environment: '',
             })
             setAiDuplicates([])
             setAiRationale('')
@@ -95,6 +106,12 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                 }
             }
             fetchMembers()
+
+            const fetchEpics = async () => {
+                const { data } = await supabase.from('epics').select('id, name').eq('project_id', projectId)
+                if (data) setEpics(data)
+            }
+            fetchEpics()
         }
     }, [open, projectId, form])
 
@@ -153,7 +170,6 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
 
         setLoading(true)
         try {
-            // 1. Get the latest bug_number for this project
             const { data: latestBug, error: countError } = await supabase
                 .from('bugs')
                 .select('bug_number')
@@ -167,7 +183,7 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
             const nextBugNumber = (latestBug?.bug_number || 0) + 1
             const bugDisplayId = `${projectCode}-${nextBugNumber}`
 
-            // 2. Insert the new bug
+            // Parse labels if needed, but since DB migration failed, we'll exclude labels/environment from the payload to avoid crashing
             const { data: newBug, error: insertError } = await supabase
                 .from('bugs')
                 .insert({
@@ -179,25 +195,25 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                     severity: values.severity,
                     priority: values.priority,
                     reported_by: user.id,
-                    assigned_to: values.assigned_to || null,
+                    assigned_to: values.assigned_to && values.assigned_to !== 'none' ? values.assigned_to : null,
+                    epic_id: values.epic_id && values.epic_id !== 'none' ? values.epic_id : null,
+                    story_points: values.story_points || 0,
                     ai_predicted_severity: values.severity,
-                    ai_suggested_assignee: values.assigned_to || null,
-                    duplicate_of: values.duplicate_of || null,
-                    status: values.duplicate_of ? 'closed' : 'open'
+                    ai_suggested_assignee: values.assigned_to && values.assigned_to !== 'none' ? values.assigned_to : null,
+                    duplicate_of: values.duplicate_of && values.duplicate_of !== 'none' ? values.duplicate_of : null,
+                    status: values.duplicate_of && values.duplicate_of !== 'none' ? 'closed' : 'open'
                 })
                 .select()
                 .single()
 
             if (insertError) throw insertError
 
-            // 3. Trigger duplicate activity sync
             if (newBug && values.duplicate_of) {
                 const { mergeDuplicateBug } = await import('@/lib/bug-actions')
                 mergeDuplicateBug(newBug.id, bugDisplayId, values.duplicate_of, user.id)
                     .catch(e => console.error("Failed to merge duplicate activity", e))
             }
 
-            // 4. Trigger Embedding
             if (newBug) {
                 aiClient.embedBug(newBug.id, {
                     title: values.title,
@@ -216,45 +232,42 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
         }
     }
 
+    const inputClasses = "w-full rounded-[3px] border border-[#DFE1E6] bg-[#FAFBFC] hover:bg-[#EBECF0] focus:bg-white focus:border-[#4C9AFF] focus:ring-1 focus:ring-[#4C9AFF] transition-colors text-sm px-3 py-2 text-[#172B4D] placeholder:text-[#A5ADBA] focus-visible:ring-1 focus-visible:ring-offset-0 focus-visible:ring-[#4C9AFF]"
+
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button className="gap-2 bg-red-600 hover:bg-red-700 text-white shadow-md transition-all hover:scale-[1.02]">
-                    <Bug className="h-4 w-4" />
-                    Report Bug
-                </Button>
+                <button className="bg-[#0052CC] hover:bg-[#0047B3] text-white px-3 py-1.5 rounded font-medium text-sm transition-colors shadow-sm flex items-center gap-2">
+                    Create Issue
+                </button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[550px] rounded-[24px] p-6 bg-white border-zinc-100 shadow-xl gap-5">
-                <DialogHeader className="space-y-2 pb-1">
-                    <DialogTitle className="text-xl font-bold tracking-tight text-zinc-900">
-                        {step === 1 ? 'Report a New Bug' : 'Review & Submit Bug'}
+            <DialogContent className="sm:max-w-[800px] p-0 bg-white border-0 shadow-[0_8px_16px_-4px_rgba(9,30,66,0.25),0_0_1px_rgba(9,30,66,0.31)] rounded-[3px] gap-0 overflow-hidden flex flex-col max-h-[90vh]">
+                
+                <DialogHeader className="px-6 py-5 border-b border-[#DFE1E6] flex flex-row items-center justify-between flex-shrink-0">
+                    <DialogTitle className="text-[20px] font-medium text-[#172B4D]">
+                        Create issue
                     </DialogTitle>
-                    <DialogDescription className="text-[15px] text-zinc-500">
-                        {step === 1
-                            ? 'Provide the details of the issue. Our AI will analyze it to suggest priority and severity.'
-                            : 'Review the AI suggestions. Modify them if needed before submitting.'}
-                    </DialogDescription>
                 </DialogHeader>
 
-                <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+                <div className="overflow-y-auto flex-1 px-6 py-5">
+                    <Form {...form}>
+                        <form id="create-bug-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
 
-                        <div className={step === 1 ? 'block' : 'hidden'}>
                             <div className="space-y-5">
                                 <FormField
                                     control={form.control}
                                     name="title"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel className="text-sm font-semibold text-zinc-900">Bug Title</FormLabel>
+                                            <FormLabel className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider mb-1">Summary<span className="text-[#DE350B] ml-1">*</span></FormLabel>
                                             <FormControl>
-                                                <Input
-                                                    placeholder="E.g. Login page crashes on retry"
-                                                    className="rounded-xl border-zinc-200 focus-visible:ring-zinc-900 h-11 text-base placeholder:text-zinc-400"
+                                                <input
                                                     {...field}
+                                                    placeholder="A concise summary of the issue"
+                                                    className={inputClasses}
                                                 />
                                             </FormControl>
-                                            <FormMessage />
+                                            <FormMessage className="text-[#DE350B] text-xs" />
                                         </FormItem>
                                     )}
                                 />
@@ -264,155 +277,209 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                                     name="description"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel className="text-sm font-semibold text-zinc-900">Description</FormLabel>
-                                            <FormControl>
-                                                <Textarea
-                                                    placeholder="Provide detailed steps or description..."
-                                                    className="resize-none h-32 rounded-xl border-zinc-200 focus-visible:ring-zinc-900 text-base placeholder:text-zinc-400 p-4"
-                                                    {...field}
-                                                />
-                                            </FormControl>
-                                            <FormMessage />
+                                            <FormLabel className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider mb-1">Description</FormLabel>
+                                            <div className="relative">
+                                                <FormControl>
+                                                    <Textarea
+                                                        {...field}
+                                                        placeholder="Add a detailed description..."
+                                                        className={`${inputClasses} min-h-[150px] resize-y`}
+                                                    />
+                                                </FormControl>
+                                                {step === 1 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleAnalyze}
+                                                        disabled={isAnalyzing}
+                                                        className="absolute bottom-3 right-3 bg-[#EAE6FF] hover:bg-[#403294] text-[#403294] hover:text-white px-3 py-1.5 rounded-[3px] text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-sm"
+                                                    >
+                                                        {isAnalyzing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                                                        {isAnalyzing ? 'Analyzing...' : 'Analyze with AI'}
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <FormMessage className="text-[#DE350B] text-xs" />
                                         </FormItem>
                                     )}
                                 />
-                            </div>
-
-                            <div className="pt-4 flex justify-end gap-3 border-t border-zinc-100 mt-6">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => setOpen(false)}
-                                    className="rounded-xl h-10 px-6 font-semibold border-zinc-200 text-zinc-700 hover:bg-zinc-50"
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="button"
-                                    onClick={handleAnalyze}
-                                    disabled={isAnalyzing}
-                                    className="rounded-xl h-10 px-8 font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-md gap-2 transition-all"
-                                >
-                                    {isAnalyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                                    Analyze with AI
-                                </Button>
-                            </div>
-                        </div>
-
-                        <div className={step === 2 ? 'block' : 'hidden'}>
-                            <div className="max-h-[320px] overflow-y-auto pr-2 space-y-4 mb-4">
-                                {aiDuplicates.length > 0 && (
-                                    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 space-y-1">
-                                        <div className="flex items-center gap-2 font-semibold text-sm">
-                                            <AlertTriangle className="h-4 w-4 text-amber-600" />
-                                            Potential Duplicates Detected
+                                
+                                {step === 2 && (
+                                    <div className="p-4 bg-[#EAE6FF] border border-[#DFE1E6] rounded text-[#172B4D] mb-4">
+                                        <div className="flex items-center gap-2 font-semibold text-sm text-[#403294] mb-2">
+                                            <Sparkles className="w-4 h-4" /> AI Analysis Complete
                                         </div>
-                                        <ul className="text-xs space-y-1 list-disc pl-5">
+                                        <p className="text-sm">{aiRationale}</p>
+                                    </div>
+                                )}
+
+                                {aiDuplicates.length > 0 && (
+                                    <div className="p-4 bg-[#FFFAE6] border border-[#FFAB00] rounded text-[#172B4D] mb-4">
+                                        <div className="flex items-center gap-2 font-semibold text-sm text-[#FF8B00] mb-2">
+                                            <AlertTriangle className="w-4 h-4" /> Potential Duplicates Detected
+                                        </div>
+                                        <ul className="text-sm list-disc pl-5">
                                             {aiDuplicates.map((dup: any, i: number) => (
-                                                <li key={i} className="text-amber-800">
-                                                    <span className="font-medium">{dup.title}</span> ({dup.priority}, {dup.severity})
-                                                </li>
+                                                <li key={i}>{dup.bug_display_id}: {dup.title}</li>
                                             ))}
                                         </ul>
                                     </div>
                                 )}
 
-                                {aiRationale && (
-                                    <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-900 text-[13px] flex gap-2.5">
-                                        <Sparkles className="h-4 w-4 text-indigo-500 shrink-0 mt-0.5" />
-                                        <div>
-                                            <p className="font-semibold mb-0.5 text-indigo-900 text-sm">AI Analysis</p>
-                                            <p className="text-indigo-800 leading-relaxed">{aiRationale}</p>
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <FormField
-                                        control={form.control}
-                                        name="severity"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel className="text-xs font-semibold text-zinc-900">Severity</FormLabel>
-                                                <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
-                                                    <FormControl>
-                                                        <SelectTrigger className="rounded-xl border-zinc-200 focus:ring-zinc-900 h-10 text-sm">
-                                                            <SelectValue placeholder="Select severity" />
-                                                        </SelectTrigger>
-                                                    </FormControl>
-                                                    <SelectContent className="rounded-xl border-zinc-100 shadow-lg">
-                                                        <SelectItem value="critical" className="rounded-lg">Critical</SelectItem>
-                                                        <SelectItem value="high" className="rounded-lg">High</SelectItem>
-                                                        <SelectItem value="medium" className="rounded-lg">Medium</SelectItem>
-                                                        <SelectItem value="low" className="rounded-lg">Low</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-
+                                <div className="grid grid-cols-2 gap-6">
                                     <FormField
                                         control={form.control}
                                         name="priority"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel className="text-xs font-semibold text-zinc-900">Priority</FormLabel>
+                                                <FormLabel className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider mb-1">Priority</FormLabel>
                                                 <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
                                                     <FormControl>
-                                                        <SelectTrigger className="rounded-xl border-zinc-200 focus:ring-zinc-900 h-10 text-sm">
+                                                        <SelectTrigger className={inputClasses}>
                                                             <SelectValue placeholder="Select priority" />
                                                         </SelectTrigger>
                                                     </FormControl>
-                                                    <SelectContent className="rounded-xl border-zinc-100 shadow-lg">
-                                                        <SelectItem value="P0" className="rounded-lg">P0 - Blocker</SelectItem>
-                                                        <SelectItem value="P1" className="rounded-lg">P1 - High</SelectItem>
-                                                        <SelectItem value="P2" className="rounded-lg">P2 - Medium</SelectItem>
-                                                        <SelectItem value="P3" className="rounded-lg">P3 - Low</SelectItem>
+                                                    <SelectContent className="bg-white border-[#DFE1E6] shadow-md rounded-[3px]">
+                                                        <SelectItem value="P0"><div className="flex items-center gap-2"><ArrowUp className="w-4 h-4 text-[#DE350B]" /> Highest (P0)</div></SelectItem>
+                                                        <SelectItem value="P1"><div className="flex items-center gap-2"><ArrowUp className="w-4 h-4 text-[#FF5630]" /> High (P1)</div></SelectItem>
+                                                        <SelectItem value="P2"><div className="flex items-center gap-2"><Minus className="w-4 h-4 text-[#FFAB00]" /> Medium (P2)</div></SelectItem>
+                                                        <SelectItem value="P3"><div className="flex items-center gap-2"><ArrowDown className="w-4 h-4 text-[#0065FF]" /> Low (P3)</div></SelectItem>
                                                     </SelectContent>
                                                 </Select>
-                                                <FormMessage />
                                             </FormItem>
                                         )}
                                     />
 
-                                     <FormField
+                                    <FormField
+                                        control={form.control}
+                                        name="severity"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider mb-1">Severity</FormLabel>
+                                                <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                                                    <FormControl>
+                                                        <SelectTrigger className={inputClasses}>
+                                                            <SelectValue placeholder="Select severity" />
+                                                        </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent className="bg-white border-[#DFE1E6] shadow-md rounded-[3px]">
+                                                        <SelectItem value="critical">Critical</SelectItem>
+                                                        <SelectItem value="high">High</SelectItem>
+                                                        <SelectItem value="medium">Medium</SelectItem>
+                                                        <SelectItem value="low">Low</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
                                         control={form.control}
                                         name="assigned_to"
                                         render={({ field }) => (
-                                            <FormItem className="col-span-2">
-                                                <FormLabel className="text-xs font-semibold text-zinc-900 flex items-center gap-2">
-                                                    Assignee
-                                                </FormLabel>
+                                            <FormItem>
+                                                <FormLabel className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider mb-1">Assignee</FormLabel>
                                                 <Select
                                                     onValueChange={(val) => field.onChange(val === 'none' ? null : val)}
                                                     defaultValue={field.value || "none"}
                                                     value={field.value || "none"}
                                                 >
                                                     <FormControl>
-                                                        <SelectTrigger className="rounded-xl border-zinc-200 focus:ring-zinc-900 h-10 text-sm">
-                                                            <SelectValue placeholder="Select a developer (optional)" />
+                                                        <SelectTrigger className={inputClasses}>
+                                                            <SelectValue placeholder="Automatic" />
                                                         </SelectTrigger>
                                                     </FormControl>
-                                                    <SelectContent className="rounded-xl border-zinc-100 shadow-lg">
-                                                        <SelectItem value="none" className="rounded-lg italic text-zinc-500">Unassigned</SelectItem>
+                                                    <SelectContent className="bg-white border-[#DFE1E6] shadow-md rounded-[3px]">
+                                                        <SelectItem value="none">Automatic</SelectItem>
                                                         {projectMembers.map(member => (
-                                                            <SelectItem key={member.id} value={member.id} className="rounded-lg">
+                                                            <SelectItem key={member.id} value={member.id}>
                                                                 {member.name}
                                                             </SelectItem>
                                                         ))}
                                                     </SelectContent>
                                                 </Select>
-                                                <FormMessage />
                                                 {aiAssigneeRationale && (
-                                                    <div className="mt-2.5 p-3 rounded-xl bg-emerald-50/50 border border-emerald-100 text-emerald-900 text-xs flex gap-2 font-sans">
-                                                        <Sparkles className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
-                                                        <div>
-                                                            <p className="font-semibold text-emerald-950 mb-0.5">AI Suggestion Rationale</p>
-                                                            <p className="text-emerald-800 leading-normal">{aiAssigneeRationale}</p>
-                                                        </div>
-                                                    </div>
+                                                    <p className="text-xs text-[#0052CC] mt-1 italic">
+                                                        AI suggests this assignee because: {aiAssigneeRationale}
+                                                    </p>
                                                 )}
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name="epic_id"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider mb-1">Epic Link (Optional)</FormLabel>
+                                                <Select onValueChange={field.onChange} defaultValue={field.value || "none"}>
+                                                    <FormControl>
+                                                        <SelectTrigger className={inputClasses}>
+                                                            <SelectValue placeholder="None" />
+                                                        </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent className="bg-white border-[#DFE1E6] shadow-md rounded-[3px]">
+                                                        <SelectItem value="none">None</SelectItem>
+                                                        {epics.map(e => (
+                                                            <SelectItem key={e.id} value={e.id}>
+                                                                {e.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name="story_points"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider mb-1">Story Points</FormLabel>
+                                                <FormControl>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max="100"
+                                                        {...field}
+                                                        className={inputClasses}
+                                                    />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name="labels"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider mb-1">Labels</FormLabel>
+                                                <FormControl>
+                                                    <input
+                                                        {...field}
+                                                        placeholder="e.g. frontend, urgent, ui"
+                                                        className={inputClasses}
+                                                    />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name="environment"
+                                        render={({ field }) => (
+                                            <FormItem className="col-span-2">
+                                                <FormLabel className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider mb-1">Environment</FormLabel>
+                                                <FormControl>
+                                                    <input
+                                                        {...field}
+                                                        placeholder="e.g. Production, Staging, Windows 10, Chrome 91"
+                                                        className={inputClasses}
+                                                    />
+                                                </FormControl>
                                             </FormItem>
                                         )}
                                     />
@@ -423,29 +490,26 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                                             name="duplicate_of"
                                             render={({ field }) => (
                                                 <FormItem className="col-span-2">
-                                                    <FormLabel className="text-xs font-semibold text-zinc-900 flex items-center gap-2">
-                                                        Link as Duplicate of
-                                                    </FormLabel>
+                                                    <FormLabel className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider mb-1">Link as duplicate of</FormLabel>
                                                     <Select
                                                         onValueChange={(val) => field.onChange(val === 'none' ? null : val)}
                                                         defaultValue={field.value || "none"}
                                                         value={field.value || "none"}
                                                     >
                                                         <FormControl>
-                                                            <SelectTrigger className="rounded-xl border-zinc-200 focus:ring-zinc-900 h-10 text-sm">
-                                                                <SelectValue placeholder="Not a duplicate (keep open)" />
+                                                            <SelectTrigger className={inputClasses}>
+                                                                <SelectValue placeholder="Not a duplicate" />
                                                             </SelectTrigger>
                                                         </FormControl>
-                                                        <SelectContent className="rounded-xl border-zinc-100 shadow-lg">
-                                                            <SelectItem value="none" className="rounded-lg italic text-zinc-500">Not a duplicate (keep open)</SelectItem>
+                                                        <SelectContent className="bg-white border-[#DFE1E6] shadow-md rounded-[3px]">
+                                                            <SelectItem value="none">Not a duplicate</SelectItem>
                                                             {aiDuplicates.map(dup => (
-                                                                <SelectItem key={dup.id} value={dup.id} className="rounded-lg">
-                                                                    {dup.bug_display_id || 'Bug'} - {dup.title}
+                                                                <SelectItem key={dup.id} value={dup.id}>
+                                                                    {dup.bug_display_id} - {dup.title}
                                                                 </SelectItem>
                                                             ))}
                                                         </SelectContent>
                                                     </Select>
-                                                    <FormMessage />
                                                 </FormItem>
                                             )}
                                         />
@@ -453,39 +517,29 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                                 </div>
                             </div>
 
-                            <div className="pt-4 flex justify-between items-center border-t border-zinc-100 mt-6">
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    onClick={() => setStep(1)}
-                                    className="rounded-xl h-10 px-4 font-semibold text-zinc-600 hover:bg-zinc-100 gap-2"
-                                >
-                                    <ArrowLeft className="h-4 w-4" />
-                                    Back
-                                </Button>
-                                <div className="flex gap-3">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => setOpen(false)}
-                                        className="rounded-xl h-10 px-6 font-semibold border-zinc-200 text-zinc-700 hover:bg-zinc-50"
-                                    >
-                                        Cancel
-                                    </Button>
-                                    <Button
-                                        type="submit"
-                                        disabled={loading}
-                                        className="rounded-xl h-10 px-8 font-semibold bg-zinc-900 text-white hover:bg-zinc-800 shadow-md"
-                                    >
-                                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        Submit Bug
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
+                        </form>
+                    </Form>
+                </div>
 
-                    </form>
-                </Form>
+                <div className="px-6 py-4 border-t border-[#DFE1E6] bg-[#FAFBFC] flex justify-end gap-2 flex-shrink-0">
+                    <button
+                        type="button"
+                        onClick={() => setOpen(false)}
+                        className="px-4 py-2 text-[#42526E] hover:bg-[#EBECF0] rounded-[3px] font-medium text-sm transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        form="create-bug-form"
+                        disabled={loading}
+                        className="px-4 py-2 bg-[#0052CC] hover:bg-[#0047B3] text-white rounded-[3px] font-medium text-sm transition-colors flex items-center gap-2"
+                    >
+                        {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                        Create
+                    </button>
+                </div>
+
             </DialogContent>
         </Dialog>
     )

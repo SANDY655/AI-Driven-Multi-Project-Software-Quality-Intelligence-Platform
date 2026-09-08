@@ -384,10 +384,12 @@ JSON Response:"""
             "feedback": clean_ollama_error(e, "code review generation")
         }
 
-def fetch_similar_tasks(query_embedding: list[float], threshold: float = 0.5, count: int = 5, project_id: str | None = None) -> list:
+def fetch_similar_tasks(db_client: Client, query_embedding: list[float], threshold: float = 0.5, count: int = 5, project_id: str | None = None) -> list:
     """Uses the pgvector match_tasks RPC to find similar tasks."""
+    if not db_client:
+        return []
     try:
-        response = supabase.rpc(
+        response = db_client.rpc(
             "match_tasks",
             {
                 "query_embedding": query_embedding,

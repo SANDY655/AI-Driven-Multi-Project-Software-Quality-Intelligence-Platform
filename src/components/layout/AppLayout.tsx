@@ -1,8 +1,23 @@
 import { useEffect, useState } from 'react'
-import { Navigate, Outlet, useLocation, Link } from 'react-router-dom'
+import { Navigate, Outlet, useLocation, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { Bug, LogOut, LayoutDashboard, Loader2, Settings } from 'lucide-react'
+import { 
+    Bug, 
+    LogOut, 
+    LayoutDashboard, 
+    Loader2, 
+    Settings,
+    Search,
+    Bell,
+    ChevronDown,
+    Plus,
+    KanbanSquare,
+    ListTodo,
+    BarChart2,
+    Menu,
+    ChevronLeft
+} from 'lucide-react'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -13,10 +28,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ProfileSettingsModal } from '../projects/ProfileSettingsModal'
 import { useDebounce } from 'use-debounce'
-import { Search } from 'lucide-react'
 import { AIChatAssistant } from '../projects/AIChatAssistant'
 
-// Reuse the Project interface
 interface Project {
     id: string
     name: string
@@ -43,6 +56,7 @@ interface Profile {
 export function AppLayout() {
     const { user, loading, signOut } = useAuth()
     const location = useLocation()
+    const navigate = useNavigate()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
 
@@ -51,13 +65,16 @@ export function AppLayout() {
     const [debouncedSearchQuery] = useDebounce(searchQuery, 300)
     const [projects, setProjects] = useState<Project[]>([])
     const [isSearchFocused, setIsSearchFocused] = useState(false)
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
 
-    // Check if the route is the dashboard Home
-    const isDashboardPath = location.pathname === '/'
-    // Check if the route is a board view
-    const isBoardView = location.pathname.endsWith('/board') || location.pathname.endsWith('/tasks')
+    // Contextual routing checks
+    const isProjectRoute = location.pathname.startsWith('/projects/')
+    const projectIdMatch = location.pathname.match(/\/projects\/([^/]+)/)
+    const currentProjectId = projectIdMatch ? projectIdMatch[1] : null
+    
+    const currentProject = projects.find(p => p.id === currentProjectId)
 
-    // Fetch projects for search
+    // Fetch projects
     useEffect(() => {
         async function loadProjects() {
             if (!user) return
@@ -94,7 +111,7 @@ export function AppLayout() {
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-[#FDFBF7] text-indigo-600">
+            <div className="min-h-screen flex items-center justify-center bg-white text-[#0747A6]">
                 <Loader2 className="animate-spin h-8 w-8" />
             </div>
         )
@@ -105,210 +122,246 @@ export function AppLayout() {
     }
 
     return (
-        <div className="h-screen w-full flex overflow-hidden bg-[#FDFBF7] text-zinc-900 font-sans">
-            {/* Minimal Modern Sidebar */}
-            <aside className={`${isBoardView ? 'w-[72px]' : 'w-[260px]'} transition-all duration-300 ease-in-out flex-shrink-0 bg-white border-r border-zinc-100 flex flex-col z-10 relative shadow-sm`}>
-
-                {/* Logo Area */}
-                <div className={`pt-10 pb-10 flex items-center ${isBoardView ? 'justify-center px-0' : 'px-8 gap-3'}`}>
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-sm flex-shrink-0">
-                        <Bug className="w-4 h-4" />
-                    </div>
-                    {!isBoardView && <span className="font-bold text-xl tracking-tight text-zinc-900 overflow-hidden whitespace-nowrap">BugTracker</span>}
-                </div>
-
-                {/* Navigation Menu */}
-                <nav className={`flex-1 space-y-2 overflow-hidden mt-6 ${isBoardView ? 'px-2' : 'px-4'}`}>
-                    {!isBoardView && (
-                        <div className="px-5 mb-5 whitespace-nowrap overflow-hidden">
-                            <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-[0.12em]">Overview</p>
+        <div className="h-screen w-full flex flex-col overflow-hidden bg-white text-[#172B4D] font-sans">
+            
+            {/* GLOBAL TOP NAVIGATION (Jira Style) */}
+            <header className="h-[56px] bg-white border-b border-[#DFE1E6] flex items-center px-4 justify-between flex-shrink-0 z-50 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+                
+                {/* Left Side: Logo & Main Menus */}
+                <div className="flex items-center h-full">
+                    <Link to="/" className="flex items-center gap-2 mr-6 hover:opacity-80 transition-opacity">
+                        <div className="w-8 h-8 rounded bg-[#0747A6] flex items-center justify-center text-white">
+                            <Bug className="w-5 h-5" />
                         </div>
-                    )}
-
-                    <Link
-                        to="/"
-                        className={`group flex items-center rounded-2xl transition-all relative ${isBoardView ? 'justify-center py-3 px-0 mx-auto w-12' : 'gap-4 px-5 py-3.5'
-                            } ${isDashboardPath
-                                ? 'text-zinc-900 font-bold bg-[#FDFDFE] shadow-sm ring-1 ring-zinc-100'
-                                : 'text-zinc-500 font-semibold hover:text-zinc-800 hover:bg-[#FDFDFE] hover:shadow-sm hover:ring-1 hover:ring-zinc-100'
-                            }`}
-                        title="Dashboard"
-                    >
-                        {/* Active Indicator Line */}
-                        {isDashboardPath && !isBoardView && (
-                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[7px] h-8 bg-[#6345FF] rounded-r-full"></div>
-                        )}
-                        <LayoutDashboard className={`h-5 w-5 flex-shrink-0 ${isDashboardPath ? 'text-[#6345FF]' : 'text-zinc-400 group-hover:text-zinc-600'} ${isDashboardPath && isBoardView && 'animate-pulse'}`} />
-                        {!isBoardView && <span className="text-[16px] whitespace-nowrap overflow-hidden">Dashboard</span>}
+                        <span className="font-bold text-[#172B4D] text-lg tracking-tight hidden sm:block">BugTracker</span>
                     </Link>
 
-                    {/* Add more functional links here as they are built, following the same style */}
-                </nav>
+                    <nav className="hidden md:flex items-center h-full gap-1">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger className="h-8 px-3 rounded text-[#42526E] font-medium hover:bg-[#EBECF0] hover:text-[#172B4D] transition-colors flex items-center gap-1 text-sm outline-none">
+                                Your work
+                                <ChevronDown className="w-4 h-4 opacity-50" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-56 bg-white border-[#DFE1E6] shadow-md rounded-md p-2">
+                                <DropdownMenuItem className="text-sm cursor-pointer" onClick={() => navigate('/')}>
+                                    Recent projects
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
 
-                {/* Bottom Section (Settings & Logout) */}
-                <div className={`mb-6 mt-auto pt-8 border-t border-zinc-50 ${isBoardView ? 'p-2' : 'p-4'}`}>
-
-                    <button
-                        onClick={() => setIsProfileModalOpen(true)}
-                        className={`w-full flex items-center rounded-2xl hover:text-zinc-800 hover:bg-[#FDFDFE] transition-colors hover:shadow-sm hover:ring-1 hover:ring-zinc-100 mb-2 ${isBoardView ? 'justify-center py-3 px-0 mx-auto w-12 text-zinc-400' : 'gap-4 px-5 py-3.5 text-[16px] font-semibold text-zinc-500'
-                            }`}
-                        title="Settings"
-                    >
-                        <Settings className="h-5 w-5 flex-shrink-0" />
-                        {!isBoardView && <span className="whitespace-nowrap overflow-hidden">Settings</span>}
-                    </button>
-
-                    <button
-                        onClick={signOut}
-                        className={`w-full flex items-center rounded-2xl hover:bg-rose-50 transition-colors ${isBoardView ? 'justify-center py-3 px-0 mx-auto w-12 text-rose-400' : 'gap-4 px-5 py-3.5 text-[16px] font-bold text-[#FF2D55]'
-                            }`}
-                        title="Log out"
-                    >
-                        <LogOut className="h-5 w-5 flex-shrink-0" />
-                        {!isBoardView && <span className="whitespace-nowrap overflow-hidden">Logout</span>}
-                    </button>
-                </div>
-            </aside>
-
-            {/* Main Content Area */}
-            <main className="flex-1 flex flex-col min-w-0 bg-[#FDFBF7] relative h-full">
-
-                {/* Modern Header Search & Profile Area */}
-                {!isBoardView && (
-                    <header className="h-[100px] flex-shrink-0 bg-transparent flex items-center px-10 justify-between sticky top-0 z-20">
-
-                        {/* Flexible Search Bar */}
-                        <div className="flex-1 max-w-xl hidden md:flex relative z-50">
-                            <div className={`w-full bg-white rounded-2xl border ${isSearchFocused ? 'border-indigo-500 ring-4 ring-indigo-50' : 'border-zinc-200/80'} px-5 py-2.5 flex items-center shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] transition-all`}>
-                                <Search className={`w-4 h-4 mr-3 transition-colors ${isSearchFocused ? 'text-indigo-500' : 'text-zinc-400'}`} />
-                                <input
-                                    type="text"
-                                    placeholder="Search your Project..."
-                                    className="bg-transparent border-none outline-none w-full text-sm text-zinc-800 placeholder:text-zinc-400 font-medium"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    onFocus={() => setIsSearchFocused(true)}
-                                    onBlur={() => {
-                                        // Slight delay to allow clicking on results
-                                        setTimeout(() => setIsSearchFocused(false), 200)
-                                    }}
-                                />
-                            </div>
-
-                            {/* Search Results Dropdown */}
-                            {isSearchFocused && searchQuery.length > 0 && (
-                                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-zinc-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                                    <div className="p-2 max-h-[300px] overflow-y-auto">
-                                        <div className="px-3 py-2 text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1">
-                                            Projects
-                                        </div>
-                                        {filteredSearchProjects.length > 0 ? (
-                                            filteredSearchProjects.map(project => (
-                                                <Link
-                                                    key={project.id}
-                                                    to={`/projects/${project.id}`}
-                                                    className="flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-50 rounded-xl transition-colors group"
-                                                    onMouseDown={(e) => {
-                                                        // Prevent default to stop the input from losing focus immediately before navigation happens
-                                                        e.preventDefault();
-                                                    }}
-                                                    onClick={() => {
-                                                        setSearchQuery('')
-                                                        setIsSearchFocused(false)
-                                                    }}
-                                                >
-                                                    <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-100 transition-colors">
-                                                        <LayoutDashboard className="w-4 h-4" />
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <h4 className="text-sm font-bold text-zinc-900 truncate group-hover:text-indigo-600 transition-colors">
-                                                            {project.name}
-                                                        </h4>
-                                                        <p className="text-xs text-zinc-500 truncate flex items-center gap-2">
-                                                            <span className="font-semibold text-zinc-400">{project.project_code}</span>
-                                                            <span className="w-1 h-1 rounded-full bg-zinc-300"></span>
-                                                            {project.github_owner}/{project.github_repo}
-                                                        </p>
-                                                    </div>
-                                                </Link>
-                                            ))
-                                        ) : (
-                                            <div className="px-3 py-6 text-center text-sm text-zinc-500">
-                                                No projects found matching "{searchQuery}"
+                        <DropdownMenu>
+                            <DropdownMenuTrigger className="h-8 px-3 rounded text-[#42526E] font-medium hover:bg-[#EBECF0] hover:text-[#172B4D] transition-colors flex items-center gap-1 text-sm outline-none">
+                                Projects
+                                <ChevronDown className="w-4 h-4 opacity-50" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-64 bg-white border-[#DFE1E6] shadow-md rounded-md p-2">
+                                <DropdownMenuLabel className="text-xs font-bold text-[#5E6C84] uppercase">Recent</DropdownMenuLabel>
+                                {projects.slice(0, 3).map(p => (
+                                    <DropdownMenuItem key={p.id} className="text-sm cursor-pointer py-2" onClick={() => navigate(`/projects/${p.id}`)}>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-6 h-6 rounded bg-[#EAE6FF] text-[#403294] flex items-center justify-center font-bold text-[10px]">
+                                                {p.project_code.substring(0, 2)}
                                             </div>
-                                        )}
-                                    </div>
+                                            <div className="flex flex-col">
+                                                <span className="font-medium text-[#172B4D]">{p.name}</span>
+                                                <span className="text-xs text-[#5E6C84]">{p.project_code}</span>
+                                            </div>
+                                        </div>
+                                    </DropdownMenuItem>
+                                ))}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem className="text-sm cursor-pointer text-[#0052CC]" onClick={() => navigate('/')}>
+                                    View all projects
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        <button className="h-8 ml-2 px-3 bg-[#0052CC] hover:bg-[#0047B3] text-white text-sm font-medium rounded transition-colors flex items-center shadow-sm">
+                            Create
+                        </button>
+                    </nav>
+                </div>
+
+                {/* Right Side: Search, Notifications, Profile */}
+                <div className="flex items-center gap-4">
+                    {/* Search Bar */}
+                    <div className="relative hidden lg:block w-[240px]">
+                        <div className={`flex items-center h-8 rounded border transition-all ${isSearchFocused ? 'border-[#4C9AFF] shadow-[0_0_0_2px_rgba(76,154,255,0.2)] bg-white' : 'border-[#DFE1E6] bg-[#FAFBFC] hover:bg-[#EBECF0]'}`}>
+                            <Search className="w-4 h-4 ml-2 text-[#5E6C84]" />
+                            <input
+                                type="text"
+                                placeholder="Search"
+                                className="w-full bg-transparent border-none outline-none px-2 text-sm text-[#172B4D] placeholder:text-[#5E6C84]"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onFocus={() => setIsSearchFocused(true)}
+                                onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                            />
+                        </div>
+                        {/* Search Results Dropdown */}
+                        {isSearchFocused && searchQuery.length > 0 && (
+                            <div className="absolute top-full mt-1 right-0 w-[300px] bg-white border border-[#DFE1E6] shadow-md rounded z-50 py-2">
+                                <div className="px-3 py-1 text-xs font-bold text-[#5E6C84] uppercase">Projects</div>
+                                {filteredSearchProjects.length > 0 ? (
+                                    filteredSearchProjects.map(project => (
+                                        <div
+                                            key={project.id}
+                                            className="px-3 py-2 hover:bg-[#F4F5F7] cursor-pointer flex items-center gap-2"
+                                            onMouseDown={(e) => e.preventDefault()}
+                                            onClick={() => {
+                                                setSearchQuery('')
+                                                setIsSearchFocused(false)
+                                                navigate(`/projects/${project.id}`)
+                                            }}
+                                        >
+                                            <div className="w-6 h-6 rounded bg-[#EAE6FF] text-[#403294] flex items-center justify-center font-bold text-[10px]">
+                                                {project.project_code.substring(0,2)}
+                                            </div>
+                                            <div className="flex flex-col min-w-0">
+                                                <span className="text-sm font-medium text-[#172B4D] truncate">{project.name}</span>
+                                                <span className="text-xs text-[#5E6C84]">{project.project_code}</span>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="px-3 py-2 text-sm text-[#5E6C84]">No results found.</div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <button className="text-[#42526E] hover:text-[#172B4D] hover:bg-[#EBECF0] p-1.5 rounded-full transition-colors relative">
+                        <Bell className="w-5 h-5" />
+                        <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#FF5630] rounded-full border border-white"></span>
+                    </button>
+                    <button className="text-[#42526E] hover:text-[#172B4D] hover:bg-[#EBECF0] p-1.5 rounded-full transition-colors" onClick={() => setIsProfileModalOpen(true)}>
+                        <Settings className="w-5 h-5" />
+                    </button>
+
+                    {/* Profile Dropdown */}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger className="outline-none">
+                            {profile?.avatar_url ? (
+                                <img src={profile.avatar_url} alt="Profile" className="w-8 h-8 rounded-full border border-[#DFE1E6] hover:opacity-80" />
+                            ) : (
+                                <div className="w-8 h-8 rounded-full bg-[#0052CC] text-white flex items-center justify-center font-bold text-xs hover:opacity-80 transition-opacity cursor-pointer">
+                                    {(profile?.github_username || profile?.display_name || user.email || '?').charAt(0).toUpperCase()}
                                 </div>
                             )}
-                        </div>
-
-                        <div className="flex items-center gap-5 ml-auto">
-                            {/* Notification Bells */}
-                            <div className="hidden md:flex items-center gap-3">
-                                <button className="w-10 h-10 rounded-full bg-white border border-zinc-100/80 flex items-center justify-center text-zinc-600 shadow-sm hover:bg-zinc-50 transition-colors">
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                    </svg>
-                                </button>
-                                <button className="w-10 h-10 rounded-full bg-white border border-zinc-100/80 flex items-center justify-center text-zinc-600 shadow-sm hover:bg-zinc-50 transition-colors relative">
-                                    <div className="absolute top-2.5 right-3 w-1.5 h-1.5 bg-rose-500 rounded-full"></div>
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                                    </svg>
-                                </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56 bg-white border-[#DFE1E6] shadow-md rounded p-1">
+                            <div className="px-3 py-3 border-b border-[#DFE1E6] mb-1">
+                                <p className="text-sm font-medium text-[#172B4D]">
+                                    {profile?.github_username ? `@${profile.github_username}` : (profile?.display_name || 'User')}
+                                </p>
+                                <p className="text-xs text-[#5E6C84] truncate">{user.email}</p>
                             </div>
+                            <DropdownMenuItem className="text-sm text-[#172B4D] cursor-pointer hover:bg-[#F4F5F7] rounded" onClick={() => setIsProfileModalOpen(true)}>
+                                Profile
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="text-sm text-[#172B4D] cursor-pointer hover:bg-[#F4F5F7] rounded" onClick={signOut}>
+                                Log out
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            </header>
 
-                            <DropdownMenu>
-                                <DropdownMenuTrigger className="flex items-center gap-3 outline-none group hover:bg-white/50 p-1.5 rounded-full transition-colors">
-                                    <span className="font-semibold text-zinc-800 text-sm hidden lg:block mr-1">
-                                        {profile?.github_username ? `@${profile.github_username}` : (profile?.display_name || user.email)}
-                                    </span>
-                                    {profile?.avatar_url ? (
-                                        <img src={profile.avatar_url} alt="Profile" className="h-10 w-10 rounded-full ring-4 ring-white shadow-sm object-cover bg-zinc-100" />
-                                    ) : (
-                                        <div className="h-10 w-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm ring-4 ring-white shadow-sm">
-                                            {(profile?.github_username || profile?.display_name || user.email || '?').charAt(0).toUpperCase()}
-                                        </div>
-                                    )}
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-56 bg-white border-zinc-100 rounded-2xl p-2 shadow-xl">
-                                    <DropdownMenuLabel className="font-normal px-2 py-3">
-                                        <div className="flex flex-col space-y-1.5">
-                                            <p className="text-sm font-bold leading-none text-zinc-900">
-                                                {profile?.github_username ? `@${profile.github_username}` : (profile?.display_name || 'User')}
-                                            </p>
-                                            <p className="text-xs font-semibold text-zinc-500">
-                                                {user.email}
-                                            </p>
-                                        </div>
-                                    </DropdownMenuLabel>
-                                    <DropdownMenuSeparator className="bg-zinc-100 mx-2" />
-                                    <DropdownMenuItem className="text-zinc-600 hover:text-indigo-600 font-semibold cursor-pointer focus:bg-indigo-50 focus:text-indigo-600 rounded-xl px-3 py-2.5 mx-1" onClick={() => setIsProfileModalOpen(true)}>
-                                        Profile Settings
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem className="text-rose-500 hover:text-rose-600 font-semibold cursor-pointer focus:bg-rose-50 focus:text-rose-600 rounded-xl px-3 py-2.5 mx-1" onClick={signOut}>
-                                        <LogOut className="mr-2 h-4 w-4" />
-                                        <span>Log out</span>
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+            <div className="flex-1 flex overflow-hidden relative">
+                
+                {/* CONTEXTUAL PROJECT SIDEBAR (Jira Style) */}
+                {isProjectRoute && currentProject && (
+                    <aside 
+                        className={`bg-[#FAFBFC] border-r border-[#DFE1E6] flex flex-col transition-all duration-300 ease-in-out relative z-40 ${isSidebarCollapsed ? 'w-[20px]' : 'w-[240px]'}`}
+                        onMouseEnter={() => isSidebarCollapsed && setIsSidebarCollapsed(false)}
+                    >
+                        {!isSidebarCollapsed && (
+                            <>
+                                {/* Project Header */}
+                                <div className="px-4 py-6 flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded bg-[#EAE6FF] text-[#403294] flex flex-shrink-0 items-center justify-center font-bold text-sm">
+                                        {currentProject.project_code.substring(0,2)}
+                                    </div>
+                                    <div className="flex flex-col overflow-hidden">
+                                        <span className="font-semibold text-[#172B4D] truncate text-sm" title={currentProject.name}>{currentProject.name}</span>
+                                        <span className="text-xs text-[#5E6C84]">Software project</span>
+                                    </div>
+                                </div>
+
+                                {/* Navigation Links */}
+                                <nav className="flex-1 px-2 space-y-0.5 overflow-y-auto">
+                                    <div className="px-3 py-2 text-xs font-bold text-[#5E6C84] uppercase tracking-wider mb-1 mt-2">Planning</div>
+                                    <Link 
+                                        to={`/projects/${currentProjectId}/board`}
+                                        className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${location.pathname.endsWith('/board') ? 'bg-[#E9F2FF] text-[#0052CC]' : 'text-[#42526E] hover:bg-[#EBECF0]'}`}
+                                    >
+                                        <KanbanSquare className="w-4 h-4" />
+                                        Board
+                                    </Link>
+                                    <Link 
+                                        to={`/projects/${currentProjectId}/tasks`}
+                                        className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${location.pathname.endsWith('/tasks') ? 'bg-[#E9F2FF] text-[#0052CC]' : 'text-[#42526E] hover:bg-[#EBECF0]'}`}
+                                    >
+                                        <ListTodo className="w-4 h-4" />
+                                        Tasks
+                                    </Link>
+                                    <Link 
+                                        to={`/projects/${currentProjectId}/backlog`}
+                                        className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${location.pathname.endsWith('/backlog') ? 'bg-[#E9F2FF] text-[#0052CC]' : 'text-[#42526E] hover:bg-[#EBECF0]'}`}
+                                    >
+                                        <Menu className="w-4 h-4" />
+                                        Backlog
+                                    </Link>
+                                    
+                                    <div className="px-3 py-2 text-xs font-bold text-[#5E6C84] uppercase tracking-wider mb-1 mt-4">Development</div>
+                                    <Link 
+                                        to={`/projects/${currentProjectId}`}
+                                        className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${location.pathname === `/projects/${currentProjectId}` ? 'bg-[#E9F2FF] text-[#0052CC]' : 'text-[#42526E] hover:bg-[#EBECF0]'}`}
+                                    >
+                                        <LayoutDashboard className="w-4 h-4" />
+                                        Project Summary
+                                    </Link>
+                                    <Link 
+                                        to={`/projects/${currentProjectId}/analytics`}
+                                        className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${location.pathname.endsWith('/analytics') ? 'bg-[#E9F2FF] text-[#0052CC]' : 'text-[#42526E] hover:bg-[#EBECF0]'}`}
+                                    >
+                                        <BarChart2 className="w-4 h-4" />
+                                        Reports
+                                    </Link>
+                                </nav>
+                                
+                                <div className="p-4 border-t border-[#DFE1E6]">
+                                    <button className="flex items-center gap-3 px-3 py-2 w-full rounded text-sm font-medium text-[#42526E] hover:bg-[#EBECF0] transition-colors">
+                                        <Settings className="w-4 h-4" />
+                                        Project settings
+                                    </button>
+                                </div>
+                            </>
+                        )}
+
+                        {/* Collapse Toggle */}
+                        <div 
+                            className="absolute -right-3 top-6 w-6 h-6 bg-white border border-[#DFE1E6] rounded-full flex items-center justify-center cursor-pointer text-[#42526E] hover:bg-[#0052CC] hover:text-white hover:border-[#0052CC] shadow-sm transition-all z-50"
+                            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                        >
+                            <ChevronLeft className={`w-4 h-4 transition-transform ${isSidebarCollapsed ? 'rotate-180' : ''}`} />
                         </div>
-                    </header>
+                    </aside>
                 )}
 
-                <div className={`flex-1 overflow-y-auto overflow-x-hidden min-h-0 relative flex flex-col ${isBoardView ? 'p-0 w-full' : 'px-10 pb-10'}`}>
+                {/* MAIN CONTENT AREA */}
+                <main className="flex-1 overflow-y-auto flex flex-col relative bg-white h-full">
                     <Outlet />
-                </div>
+                    <AIChatAssistant />
+                </main>
+            </div>
 
-                <ProfileSettingsModal
-                    isOpen={isProfileModalOpen}
-                    onClose={() => setIsProfileModalOpen(false)}
-                    user={user}
-                    profile={profile}
-                />
-                
-                <AIChatAssistant />
-            </main>
+            <ProfileSettingsModal
+                isOpen={isProfileModalOpen}
+                onClose={() => setIsProfileModalOpen(false)}
+                user={user}
+                profile={profile}
+            />
         </div>
     )
 }

@@ -4,12 +4,10 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
 import { UserPlus, Loader2 } from 'lucide-react'
 
 interface InviteMemberModalProps {
@@ -31,7 +29,6 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
         setError(null)
 
         try {
-            // RBAC: Verify user permission
             const { data: userRole } = await supabase
                 .from('project_members')
                 .select('project_role')
@@ -42,7 +39,6 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
             if (!userRole || !['admin', 'pm'].includes(userRole.project_role)) {
                 throw new Error('You do not have permission to invite members.')
             }
-            // 1. Find the user by their email in the profiles table
             const { data: profile, error: profileError } = await supabase
                 .from('profiles')
                 .select('id')
@@ -53,7 +49,6 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
                 throw new Error('User not found. They must sign up for the app first.')
             }
 
-            // 2. Insert into project_members
             const { error: inviteError } = await supabase
                 .from('project_members')
                 .insert({
@@ -63,15 +58,12 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
                 })
 
             if (inviteError) {
-                if (inviteError.code === '23505') { // Unique violation
+                if (inviteError.code === '23505') {
                     throw new Error('This user is already a member of this project.')
                 }
                 throw new Error(inviteError.message)
             }
 
-            // Success - member added
-
-            // Fetch additional details for the email
             const { data: project } = await supabase
                 .from('projects')
                 .select('name')
@@ -84,7 +76,6 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
                 .eq('id', user?.id)
                 .single()
 
-            // Try to send the invitation email, but don't fail the whole process if it errors
             try {
                 await supabase.functions.invoke('send-invite-email', {
                     body: {
@@ -96,7 +87,6 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
                 })
             } catch (emailErr) {
                 console.error('Failed to send invite email:', emailErr)
-                // We don't throw an error here because the user was already successfully added
             }
 
             setOpen(false)
@@ -110,81 +100,73 @@ export function InviteMemberModal({ projectId, onSuccess }: InviteMemberModalPro
         }
     }
 
+    const inputClasses = "w-full rounded-[3px] border border-[#DFE1E6] bg-[#FAFBFC] hover:bg-[#EBECF0] focus:bg-white focus:border-[#4C9AFF] focus:ring-1 focus:ring-[#4C9AFF] transition-colors text-sm px-3 py-2 text-[#172B4D] placeholder:text-[#A5ADBA] focus-visible:ring-1 focus-visible:ring-offset-0 focus-visible:ring-[#4C9AFF]"
+
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button size="sm" variant="outline" className="gap-2 text-zinc-600 border-zinc-200 bg-white hover:bg-zinc-50 hover:text-zinc-900 shadow-sm transition-all h-9">
-                    <UserPlus className="h-4 w-4" />
-                    Invite
-                </Button>
+                <button className="bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#42526E] border border-[#DFE1E6] px-3 py-1.5 rounded-[3px] font-medium text-sm transition-colors flex items-center gap-2">
+                    <UserPlus className="h-4 w-4" /> Add people
+                </button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px] rounded-[24px] p-6 bg-white border-zinc-100 shadow-xl gap-5">
-                <DialogHeader className="space-y-2 pb-1">
-                    <DialogTitle className="text-xl font-bold tracking-tight text-zinc-900">Invite a Team Member</DialogTitle>
-                    <DialogDescription className="text-[15px] text-zinc-500">
-                        Add an existing user to this project. They must have an account.
-                    </DialogDescription>
+            <DialogContent className="sm:max-w-[480px] p-0 bg-white border-0 shadow-[0_8px_16px_-4px_rgba(9,30,66,0.25),0_0_1px_rgba(9,30,66,0.31)] rounded-[3px] gap-0 overflow-hidden flex flex-col">
+                <DialogHeader className="px-6 py-5 border-b border-[#DFE1E6] flex flex-row items-center justify-between flex-shrink-0">
+                    <DialogTitle className="text-[20px] font-medium text-[#172B4D]">Add people</DialogTitle>
                 </DialogHeader>
 
-                <form onSubmit={handleInvite} className="space-y-5">
-                    <div className="space-y-1.5">
-                        <label className="text-sm font-semibold text-zinc-900">User Email Address</label>
+                <form id="invite-member-form" onSubmit={handleInvite} className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+                    <div className="space-y-2">
+                        <label className="block text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider">Email Address<span className="text-[#DE350B] ml-1">*</span></label>
                         <input
                             type="email"
                             required
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="colleague@example.com"
-                            className="flex h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-900 shadow-sm transition-shadow"
+                            placeholder="e.g., maria@company.com"
+                            className={inputClasses}
                         />
                     </div>
 
-                    <div className="space-y-1.5">
-                        <label className="text-sm font-semibold text-zinc-900">Project Role</label>
+                    <div className="space-y-2">
+                        <label className="block text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider">Role</label>
                         <select
                             value={role}
                             onChange={(e) => setRole(e.target.value)}
-                            className="flex h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-base text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 shadow-sm transition-shadow"
+                            className={inputClasses}
                         >
-                            <option value="viewer">Viewer (Read-only)</option>
-                            <option value="tester">Tester (Create Bugs)</option>
-                            <option value="developer">Developer (Fix Bugs)</option>
+                            <option value="viewer">Viewer</option>
+                            <option value="tester">Tester</option>
+                            <option value="developer">Developer</option>
                             <option value="pm">Project Manager</option>
                             <option value="admin">Admin</option>
                         </select>
                     </div>
 
                     {error && (
-                        <div className="p-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                        <div className="p-3 bg-[#FFEBE6] border border-[#DE350B] text-[#DE350B] text-sm rounded-[3px]">
                             {error}
                         </div>
                     )}
-
-                    <div className="pt-2 flex justify-end gap-3 border-t border-zinc-100 mt-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setOpen(false)}
-                            className="rounded-xl h-10 px-6 font-semibold border-zinc-200 text-zinc-700 hover:bg-zinc-50"
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            type="submit"
-                            disabled={loading}
-                            className="rounded-xl h-10 px-8 font-semibold bg-zinc-900 text-white hover:bg-zinc-800"
-                        >
-                            {loading ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Sending...
-                                </>
-                            ) : (
-                                'Add Member'
-                            )}
-                        </Button>
-                    </div>
                 </form>
+
+                <div className="px-6 py-4 border-t border-[#DFE1E6] bg-[#FAFBFC] flex justify-end gap-2 flex-shrink-0">
+                    <button
+                        type="button"
+                        onClick={() => setOpen(false)}
+                        className="px-4 py-2 text-[#42526E] hover:bg-[#EBECF0] rounded-[3px] font-medium text-sm transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        form="invite-member-form"
+                        disabled={loading}
+                        className="px-4 py-2 bg-[#0052CC] hover:bg-[#0047B3] text-white rounded-[3px] font-medium text-sm transition-colors flex items-center gap-2"
+                    >
+                        {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Add
+                    </button>
+                </div>
             </DialogContent>
         </Dialog>
     )

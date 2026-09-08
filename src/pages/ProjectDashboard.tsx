@@ -9,7 +9,7 @@ import { EditProjectModal } from '../components/projects/EditProjectModal'
 import { CreateBugModal } from '../components/projects/CreateBugModal'
 import { CreateTaskModal } from '../components/projects/tasks/CreateTaskModal'
 import { Button } from '@/components/ui/button'
-import { Github, Users, Bug, AlertCircle, ArrowLeft, Trash2, Columns, ExternalLink, CheckSquare, Lock, ShieldCheck } from 'lucide-react'
+import { Github, Users, Bug, AlertCircle, Trash2, ExternalLink, CheckSquare, Lock, ShieldCheck, Activity } from 'lucide-react'
 
 interface Project {
     id: string
@@ -35,18 +35,18 @@ interface Project {
 }
 
 const ROLE_BADGE: Record<string, { label: string; color: string }> = {
-    admin: { label: 'Admin', color: 'bg-red-50 text-red-700 ring-red-600/20' },
-    owner: { label: 'Owner', color: 'bg-purple-50 text-purple-700 ring-purple-600/20' },
-    write: { label: 'Write', color: 'bg-blue-50 text-blue-700 ring-blue-600/20' },
-    maintain: { label: 'Maintain', color: 'bg-amber-50 text-amber-700 ring-amber-600/20' },
-    triage: { label: 'Triage', color: 'bg-zinc-100 text-zinc-700 ring-zinc-500/20' },
-    read: { label: 'Read', color: 'bg-zinc-100 text-zinc-700 ring-zinc-500/20' },
+    admin: { label: 'Admin', color: 'bg-[#FFEBE6] text-[#DE350B]' },
+    owner: { label: 'Owner', color: 'bg-[#EAE6FF] text-[#403294]' },
+    write: { label: 'Write', color: 'bg-[#DEEBFF] text-[#0052CC]' },
+    maintain: { label: 'Maintain', color: 'bg-[#FFFAE6] text-[#FF8B00]' },
+    triage: { label: 'Triage', color: 'bg-[#EBECF0] text-[#42526E]' },
+    read: { label: 'Read', color: 'bg-[#EBECF0] text-[#42526E]' },
 }
 
 function RoleBadge({ role }: { role: string }) {
-    const badge = ROLE_BADGE[role] ?? { label: role, color: 'bg-zinc-100 text-zinc-700 ring-zinc-500/20' }
+    const badge = ROLE_BADGE[role] ?? { label: role, color: 'bg-[#EBECF0] text-[#42526E]' }
     return (
-        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ring-1 ring-inset uppercase ${badge.color}`}>
+        <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded uppercase ${badge.color}`}>
             {badge.label}
         </span>
     )
@@ -62,7 +62,6 @@ export function ProjectDashboard() {
     const [loading, setLoading] = useState(true)
     const [githubToken, setGithubToken] = useState<string | undefined>(undefined)
 
-    // Fetch contributors + collaborators with a given token
     const fetchGitHubData = async (owner: string, repo: string, token?: string) => {
         const [contribs, collabs] = await Promise.all([
             getRepoContributors(owner, repo, token),
@@ -97,7 +96,6 @@ export function ProjectDashboard() {
             if (data && !error) {
                 setProject(data)
 
-                // Token resolution: OAuth provider token > stored PAT from creation
                 const token =
                     session?.provider_token ||
                     localStorage.getItem(`github_pat_${data.id}`) ||
@@ -163,22 +161,24 @@ export function ProjectDashboard() {
 
     if (loading) {
         return (
-            <div className="animate-pulse space-y-6">
-                <div className="h-8 bg-white/60 rounded w-1/4"></div>
-                <div className="h-32 bg-white rounded-2xl border border-zinc-200"></div>
+            <div className="flex-1 p-8 text-[#172B4D] animate-pulse">
+                <div className="h-4 bg-[#EBECF0] w-32 rounded mb-4"></div>
+                <div className="h-8 bg-[#EBECF0] w-64 rounded mb-8"></div>
+                <div className="grid grid-cols-3 gap-6">
+                    <div className="col-span-2 h-64 bg-[#EBECF0] rounded"></div>
+                    <div className="col-span-1 h-64 bg-[#EBECF0] rounded"></div>
+                </div>
             </div>
         )
     }
 
     if (!project) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[400px] text-zinc-500">
-                <AlertCircle className="h-12 w-12 mb-4 text-red-500/50" />
-                <h2 className="text-xl text-zinc-900 font-semibold mb-2">Project not found</h2>
-                <p className="text-zinc-500">This project may have been deleted or you don't have access.</p>
-                <Link to="/" className="mt-6 text-blue-600 hover:text-blue-700 font-medium hover:underline">
-                    Return to Dashboard
-                </Link>
+            <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
+                <AlertCircle className="h-12 w-12 text-[#FF5630] mb-4" />
+                <h2 className="text-xl font-medium text-[#172B4D] mb-2">Project not found</h2>
+                <p className="text-[#5E6C84] mb-6">This project may have been deleted or you don't have access.</p>
+                <Link to="/" className="text-[#0052CC] hover:underline font-medium">Return to Dashboard</Link>
             </div>
         )
     }
@@ -186,38 +186,30 @@ export function ProjectDashboard() {
     const isPrivate = project.github_details?.private === true
 
     return (
-        <div className="space-y-6">
+        <div className="flex-1 max-w-6xl mx-auto w-full px-6 py-8 text-[#172B4D]">
+            {/* Breadcrumbs */}
+            <div className="flex items-center text-sm text-[#5E6C84] mb-4">
+                <Link to="/" className="hover:underline">Projects</Link>
+                <span className="mx-2">/</span>
+                <span className="text-[#172B4D]">{project.name}</span>
+            </div>
+
             {/* Header */}
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-4">
-                    <Link to="/" className="p-2 -ml-2 hover:bg-white rounded-full text-zinc-500 hover:text-zinc-900 transition-colors">
-                        <ArrowLeft className="h-5 w-5" />
-                    </Link>
+                    <div className="w-10 h-10 rounded bg-[#EAE6FF] text-[#403294] flex items-center justify-center font-bold text-lg">
+                        {project.project_code.substring(0, 2)}
+                    </div>
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight text-zinc-900 flex items-center gap-3">
+                        <h1 className="text-2xl font-medium tracking-tight flex items-center gap-2">
                             {project.name}
-                            <span className="text-sm font-mono font-semibold bg-zinc-100 text-zinc-600 px-2 py-1 rounded align-middle">
-                                {project.project_code}
-                            </span>
-                            {isPrivate && (
-                                <span className="inline-flex items-center gap-1 text-xs font-semibold bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20 px-2 py-1 rounded-full">
-                                    <Lock className="h-3 w-3" /> Private
-                                </span>
-                            )}
+                            {isPrivate && <Lock className="w-4 h-4 text-[#FF8B00]" />}
                         </h1>
-                        <a
-                            href={project.github_repo_url || `https://github.com/${project.github_owner}/${project.github_repo}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-2 text-zinc-500 hover:text-blue-600 mt-2 text-sm font-medium transition-colors"
-                        >
-                            <Github className="h-4 w-4" />
-                            {project.github_owner}/{project.github_repo}
-                        </a>
+                        <p className="text-sm text-[#5E6C84]">{project.project_code} • Software project</p>
                     </div>
                 </div>
-
-                {/* Project Actions - Only for admins/creators */}
+                
+                {/* Project Actions */}
                 {(() => {
                     const userMember = project.project_members?.find(m => m.profiles.id === user?.id);
                     const userRole = userMember?.project_role;
@@ -232,255 +224,153 @@ export function ProjectDashboard() {
                             />
                             <Button
                                 variant="outline"
-                                size="sm"
                                 onClick={handleDeleteProject}
-                                className="bg-white border-zinc-200 text-zinc-600 hover:text-red-600 hover:bg-red-50 hover:border-red-200 gap-2 transition-all h-9"
+                                className="bg-[#FAFBFC] border-[#DFE1E6] text-[#42526E] hover:bg-[#FFEBE6] hover:text-[#DE350B] hover:border-[#DE350B] h-8 px-3 transition-colors"
                             >
-                                <Trash2 className="h-4 w-4" />
-                                Delete Project
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Delete
                             </Button>
                         </div>
                     );
                 })()}
             </div>
 
-            {/* GitHub Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-white border border-zinc-200 rounded-2xl p-4 shadow-sm">
-                    <div className="text-zinc-500 font-medium text-sm mb-1">Stars</div>
-                    <div className="text-2xl font-semibold text-zinc-900">
-                        {project.github_details?.stars || 0}
-                    </div>
-                </div>
-                <div className="bg-white border border-zinc-200 rounded-2xl p-4 shadow-sm">
-                    <div className="text-zinc-500 font-medium text-sm mb-1">Forks</div>
-                    <div className="text-2xl font-semibold text-zinc-900">
-                        {project.github_details?.forks || 0}
-                    </div>
-                </div>
-                <div className="bg-white border border-zinc-200 rounded-2xl p-4 shadow-sm">
-                    <div className="text-zinc-500 font-medium text-sm mb-1">Open GitHub Issues</div>
-                    <div className="text-2xl font-semibold text-zinc-900">
-                        {project.github_details?.openIssues || 0}
-                    </div>
-                </div>
-                <div className="bg-white border border-zinc-200 rounded-2xl p-4 shadow-sm">
-                    <div className="text-zinc-500 font-medium text-sm mb-1">Language</div>
-                    <div className="text-2xl font-semibold text-zinc-900 truncate">
-                        {project.github_details?.language || 'N/A'}
-                    </div>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4">
-                {/* Main Content Area */}
-                <div className="col-span-2 space-y-6">
-                    <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm flex flex-col min-h-[300px]">
-                        <div className="p-4 border-b border-zinc-100 flex justify-between items-center bg-zinc-50/50">
-                            <h2 className="font-semibold text-zinc-900 flex items-center gap-2">
-                                <Bug className="h-4 w-4 text-red-500" />
-                                Recent Bugs Tracker
-                            </h2>
-                            {(() => {
-                                const userMember = project.project_members?.find(m => m.profiles.id === user?.id);
-                                const userRole = userMember?.project_role;
-                                const canCreateBug = ['admin', 'pm', 'tester'].includes(userRole || '');
-
-                                return canCreateBug && (
-                                    <CreateBugModal
-                                        projectId={project.id}
-                                        projectCode={project.project_code}
-                                        onSuccess={handleAssignSuccess}
-                                    />
-                                );
-                            })()}
-                        </div>
-                        <div className="flex-1 p-8 flex flex-col items-center justify-center text-zinc-500 bg-zinc-50/30">
-                            <Columns className="h-12 w-12 mb-4 text-blue-500/50" />
-                            <h3 className="text-lg font-medium text-zinc-800 mb-2">Bug Kanban Board</h3>
-                            <p className="text-center max-w-sm mb-6">
-                                View and manage all bugs for this project in the dedicated Kanban Board view. Track progress from Open to Closed.
-                            </p>
-                            <Link
-                                to={`/projects/${project.id}/board`}
-                                className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 disabled:pointer-events-none disabled:opacity-50 bg-blue-600 text-white shadow hover:bg-blue-600/90 h-9 px-4 py-2 gap-2"
-                            >
-                                <Columns className="h-4 w-4" />
-                                Open Bug Board
-                            </Link>
+            {/* Two Column Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                
+                {/* Left Column (Main content) */}
+                <div className="col-span-2 space-y-8">
+                    
+                    {/* Activity/Quick Actions */}
+                    <div>
+                        <h2 className="text-lg font-medium mb-4">Quick Actions</h2>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="border border-[#DFE1E6] rounded p-5 hover:shadow-[0_1px_4px_rgba(9,30,66,0.15)] transition-shadow bg-white flex flex-col items-start cursor-pointer" onClick={() => navigate(`/projects/${project.id}/board`)}>
+                                <div className="w-8 h-8 rounded bg-[#EAE6FF] text-[#403294] flex items-center justify-center mb-3">
+                                    <Bug className="w-4 h-4" />
+                                </div>
+                                <h3 className="font-medium text-[#172B4D] mb-1">Bug Tracker</h3>
+                                <p className="text-xs text-[#5E6C84] mb-4">View open bugs and issues</p>
+                                <div onClick={e => e.stopPropagation()}>
+                                    <CreateBugModal projectId={project.id} projectCode={project.project_code} onSuccess={handleAssignSuccess} />
+                                </div>
+                            </div>
+                            
+                            <div className="border border-[#DFE1E6] rounded p-5 hover:shadow-[0_1px_4px_rgba(9,30,66,0.15)] transition-shadow bg-white flex flex-col items-start cursor-pointer" onClick={() => navigate(`/projects/${project.id}/tasks`)}>
+                                <div className="w-8 h-8 rounded bg-[#E3FCEF] text-[#006644] flex items-center justify-center mb-3">
+                                    <CheckSquare className="w-4 h-4" />
+                                </div>
+                                <h3 className="font-medium text-[#172B4D] mb-1">Task Board</h3>
+                                <p className="text-xs text-[#5E6C84] mb-4">Manage planned tasks</p>
+                                <div onClick={e => e.stopPropagation()}>
+                                    <CreateTaskModal projectId={project.id} projectCode={project.project_code} onSuccess={handleAssignSuccess} />
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Tasks Board Section */}
-                    <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm flex flex-col min-h-[300px]">
-                        <div className="p-4 border-b border-zinc-100 flex justify-between items-center bg-zinc-50/50">
-                            <h2 className="font-semibold text-zinc-900 flex items-center gap-2">
-                                <CheckSquare className="h-4 w-4 text-emerald-500" />
-                                Tasks Tracker
-                            </h2>
-                            {(() => {
-                                const userMember = project.project_members?.find(m => m.profiles.id === user?.id);
-                                const userRole = userMember?.project_role;
-                                const canCreateTask = ['admin', 'pm', 'tester', 'developer'].includes(userRole || '');
-
-                                return canCreateTask && (
-                                    <CreateTaskModal
-                                        projectId={project.id}
-                                        projectCode={project.project_code}
-                                        onSuccess={handleAssignSuccess}
-                                    />
-                                );
-                            })()}
-                        </div>
-                        <div className="flex-1 p-8 flex flex-col items-center justify-center text-zinc-500 bg-zinc-50/30">
-                            <Columns className="h-12 w-12 mb-4 text-emerald-500/50" />
-                            <h3 className="text-lg font-medium text-zinc-800 mb-2">Task Kanban Board</h3>
-                            <p className="text-center max-w-sm mb-6">
-                                View and manage all planned tasks for this project. Track progress from To Do to Done.
-                            </p>
-                            <Link
-                                to={`/projects/${project.id}/tasks`}
-                                className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 disabled:pointer-events-none disabled:opacity-50 bg-emerald-600 text-white shadow hover:bg-emerald-600/90 h-9 px-4 py-2 gap-2"
-                            >
-                                <Columns className="h-4 w-4" />
-                                Open Task Board
-                            </Link>
+                    {/* Stats */}
+                    <div>
+                        <h2 className="text-lg font-medium mb-4">Details</h2>
+                        <div className="border border-[#DFE1E6] rounded bg-white p-5">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                                <div>
+                                    <p className="text-xs font-bold text-[#5E6C84] uppercase tracking-wider mb-1">Repository</p>
+                                    <a href={project.github_repo_url || `https://github.com/${project.github_owner}/${project.github_repo}`} target="_blank" rel="noreferrer" className="text-sm text-[#0052CC] hover:underline flex items-center gap-1">
+                                        <Github className="w-3.5 h-3.5" />
+                                        {project.github_repo}
+                                    </a>
+                                </div>
+                                <div>
+                                    <p className="text-xs font-bold text-[#5E6C84] uppercase tracking-wider mb-1">Language</p>
+                                    <p className="text-sm font-medium">{project.github_details?.language || 'N/A'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs font-bold text-[#5E6C84] uppercase tracking-wider mb-1">Stars</p>
+                                    <p className="text-sm font-medium">{project.github_details?.stars || 0}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs font-bold text-[#5E6C84] uppercase tracking-wider mb-1">Forks</p>
+                                    <p className="text-sm font-medium">{project.github_details?.forks || 0}</p>
+                                </div>
+                            </div>
+                            {project.description && (
+                                <div className="mt-6 pt-4 border-t border-[#DFE1E6]">
+                                    <p className="text-xs font-bold text-[#5E6C84] uppercase tracking-wider mb-2">Description</p>
+                                    <p className="text-sm text-[#172B4D]">{project.description}</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
 
-                {/* Sidebar */}
+                {/* Right Column (Sidebar) */}
                 <div className="space-y-6">
-                    {/* App Team Members */}
-                    <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm">
-                        <div className="p-4 border-b border-zinc-100 flex justify-between items-center bg-zinc-50/50">
-                            <h2 className="font-semibold text-zinc-900 flex items-center gap-2">
-                                <Users className="h-4 w-4" />
-                                App Team Members
+                    {/* Team Members */}
+                    <div className="border border-[#DFE1E6] rounded bg-white">
+                        <div className="p-4 border-b border-[#DFE1E6] flex justify-between items-center bg-[#FAFBFC] rounded-t">
+                            <h2 className="font-medium text-[#172B4D] flex items-center gap-2">
+                                <Users className="w-4 h-4 text-[#5E6C84]" />
+                                Team
                             </h2>
                             {project.project_members?.some(m => m.profiles.id === user?.id && ['admin', 'pm'].includes(m.project_role)) && (
                                 <InviteMemberModal projectId={project.id} onSuccess={handleAssignSuccess} />
                             )}
                         </div>
-                        <div className="p-4">
-                            <div className="space-y-4">
-                                {project.project_members?.map((member, i) => (
-                                    <div key={i} className="flex items-center gap-3">
-                                        {member.profiles.avatar_url ? (
-                                            <img src={member.profiles.avatar_url} alt="avatar" className="h-8 w-8 rounded-full border border-zinc-200" />
-                                        ) : (
-                                            <div className="h-8 w-8 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center font-semibold text-xs border border-blue-200">
-                                                {member.profiles.display_name?.charAt(0) || '?'}
-                                            </div>
-                                        )}
-                                        <div className="flex-1 min-w-0">
-                                            <div className="text-sm text-zinc-900 font-medium truncate flex items-center justify-between gap-2">
-                                                <div className="flex items-center gap-2 truncate">
-                                                    {member.profiles.display_name}
-                                                    {member.profiles.id === user?.id && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded uppercase flex-shrink-0 font-semibold">You</span>}
-                                                </div>
-                                                {project.project_members?.some(m => m.profiles.id === user?.id && ['admin', 'pm'].includes(m.project_role)) && (
-                                                    <EditMemberRoleModal
-                                                        projectId={project.id}
-                                                        memberId={member.profiles.id}
-                                                        memberName={member.profiles.display_name}
-                                                        currentRole={member.project_role}
-                                                        onSuccess={handleAssignSuccess}
-                                                    />
-                                                )}
-                                            </div>
-                                            <div className="text-xs text-zinc-500 uppercase tracking-wider font-medium">{member.project_role}</div>
+                        <div className="p-4 space-y-4">
+                            {project.project_members?.map((member, i) => (
+                                <div key={i} className="flex items-center gap-3">
+                                    {member.profiles.avatar_url ? (
+                                        <img src={member.profiles.avatar_url} alt="avatar" className="w-8 h-8 rounded-full" />
+                                    ) : (
+                                        <div className="w-8 h-8 rounded-full bg-[#0052CC] text-white flex items-center justify-center font-bold text-xs">
+                                            {member.profiles.display_name?.charAt(0) || '?'}
                                         </div>
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="text-sm font-medium text-[#172B4D] truncate">{member.profiles.display_name}</span>
+                                            {project.project_members?.some(m => m.profiles.id === user?.id && ['admin', 'pm'].includes(m.project_role)) && (
+                                                <EditMemberRoleModal
+                                                    projectId={project.id}
+                                                    memberId={member.profiles.id}
+                                                    memberName={member.profiles.display_name}
+                                                    currentRole={member.project_role}
+                                                    onSuccess={handleAssignSuccess}
+                                                />
+                                            )}
+                                        </div>
+                                        <span className="text-xs text-[#5E6C84] uppercase font-bold tracking-wider">{member.project_role}</span>
                                     </div>
-                                ))}
-                            </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
 
-                    {/* GitHub Collaborators Panel — always shown */}
-                    <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm">
-                        <div className="p-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
-                            <h2 className="font-semibold text-zinc-900 flex items-center gap-2">
-                                <ShieldCheck className="h-4 w-4 text-amber-500" />
-                                GitHub Collaborators
-                                {isPrivate && <Lock className="h-3 w-3 text-amber-400" />}
+                    {/* GitHub Collaborators */}
+                    <div className="border border-[#DFE1E6] rounded bg-white">
+                        <div className="p-4 border-b border-[#DFE1E6] flex items-center justify-between bg-[#FAFBFC] rounded-t">
+                            <h2 className="font-medium text-[#172B4D] flex items-center gap-2">
+                                <ShieldCheck className="w-4 h-4 text-[#5E6C84]" />
+                                Collaborators
                             </h2>
-                            <span className="text-xs font-medium text-zinc-500">{collaborators.length} total</span>
+                            <span className="text-xs font-bold bg-[#EBECF0] text-[#42526E] px-2 py-0.5 rounded-full">{collaborators.length}</span>
                         </div>
                         <div className="p-4">
                             {collaborators.length > 0 ? (
                                 <div className="space-y-3">
                                     {collaborators.map((c, i) => (
                                         <a key={i} href={c.html_url} target="_blank" rel="noreferrer" className="flex items-center gap-3 group">
-                                            <img src={c.avatar_url} alt="avatar" className="h-8 w-8 rounded-full border border-zinc-200 group-hover:border-zinc-300 transition-colors" />
-                                            <div className="flex-1 min-w-0">
-                                                <div className="text-sm text-zinc-700 font-medium truncate group-hover:text-blue-600 transition-colors flex justify-between items-center gap-2">
-                                                    <span>@{c.login}</span>
-                                                    <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                                                </div>
-                                                <div className="mt-0.5">
-                                                    <RoleBadge role={c.role_name} />
-                                                </div>
+                                            <img src={c.avatar_url} alt="avatar" className="w-6 h-6 rounded-full" />
+                                            <div className="flex-1 min-w-0 flex items-center justify-between">
+                                                <span className="text-sm text-[#172B4D] group-hover:text-[#0052CC] hover:underline truncate">@{c.login}</span>
+                                                <RoleBadge role={c.role_name} />
                                             </div>
                                         </a>
                                     ))}
                                 </div>
                             ) : (
-                                <div className="py-3 text-sm space-y-3">
-                                    {githubToken ? (
-                                        // Has a token but still no collaborators
-                                        <div className="text-center text-zinc-500 space-y-1 py-2">
-                                            <ShieldCheck className="h-6 w-6 mx-auto opacity-30 mb-2" />
-                                            <p>No collaborators found.</p>
-                                            <p className="text-xs">You may not have collaborator access to this repo.</p>
-                                        </div>
-                                    ) : (
-                                        // No token available at all
-                                        <div className="text-center text-zinc-500 py-3 space-y-1">
-                                            <ShieldCheck className="h-6 w-6 mx-auto opacity-30 mb-2" />
-                                            <p className="text-sm">No GitHub token found.</p>
-                                            <p className="text-xs text-zinc-600">
-                                                When creating a project, add a GitHub Personal Access Token
-                                                with <code className="text-amber-600 font-mono">repo</code> scope to view collaborators automatically.
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Top Contributors Panel — always shown */}
-                    <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm">
-                        <div className="p-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
-                            <h2 className="font-semibold text-zinc-900 flex items-center gap-2">
-                                <Github className="h-4 w-4" />
-                                Top Contributors
-                            </h2>
-                            <span className="text-xs font-medium text-zinc-500">{contributors.length} shown</span>
-                        </div>
-                        <div className="p-4">
-                            {contributors.length > 0 ? (
-                                <div className="space-y-3">
-                                    {contributors.map((c, i) => (
-                                        <a key={i} href={c.html_url} target="_blank" rel="noreferrer" className="flex items-center gap-3 group">
-                                            <img src={c.avatar_url} alt="avatar" className="h-8 w-8 rounded-full border border-zinc-200 group-hover:border-zinc-300 transition-colors" />
-                                            <div className="flex-1 min-w-0">
-                                                <div className="text-sm text-zinc-700 font-medium truncate group-hover:text-blue-600 transition-colors flex justify-between items-center">
-                                                    @{c.login}
-                                                    <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                </div>
-                                                <div className="text-xs text-zinc-500">{c.contributions} commits</div>
-                                            </div>
-                                        </a>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-center py-4 text-zinc-500 text-sm">
-                                    <Github className="h-6 w-6 mx-auto opacity-30 mb-2" />
-                                    <p>No contributors found.</p>
-                                    {isPrivate && <p className="text-xs mt-1">Private repo — contributors may require GitHub auth.</p>}
-                                </div>
+                                <p className="text-sm text-[#5E6C84]">No collaborators found.</p>
                             )}
                         </div>
                     </div>

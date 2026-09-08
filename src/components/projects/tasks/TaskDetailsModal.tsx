@@ -7,10 +7,9 @@ import {
     DialogContent,
     DialogTitle,
 } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Loader2, UserPlus, Trash2, Clock, MessageSquare, Activity, X } from 'lucide-react'
+import { X, CheckSquare, MessageSquare, Plus, Trash2, ArrowUp, ArrowDown, Minus, UserPlus, Loader2, Link2, GitBranch, GitCommit, Copy, ExternalLink, Clock, Sparkles } from 'lucide-react'
 
 interface TaskDetailsModalProps {
     taskId: string | null
@@ -21,7 +20,7 @@ interface TaskDetailsModalProps {
 }
 
 const PRIORITY_LABELS: Record<string, string> = {
-    urgent: 'Urgent',
+    urgent: 'Highest',
     high: 'High',
     medium: 'Medium',
     low: 'Low'
@@ -45,11 +44,22 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
     const [submittingComment, setSubmittingComment] = useState(false)
     const [commentError, setCommentError] = useState<string | null>(null)
     const [currentUserRole, setCurrentUserRole] = useState<string | undefined>(initialUserRole)
+    const [subTasks, setSubTasks] = useState<any[]>([])
+    const [epics, setEpics] = useState<any[]>([])
+    const [isBreakingDown, setIsBreakingDown] = useState(false)
+    const [logWorkOpen, setLogWorkOpen] = useState(false)
+    const [logWorkTime, setLogWorkTime] = useState('')
+    
+    // Development tracking
+    const [branches, setBranches] = useState<any[]>([])
+    const [commits, setCommits] = useState<any[]>([])
+    const [linkCommitOpen, setLinkCommitOpen] = useState(false)
+    const [commitUrl, setCommitUrl] = useState('')
+    const [copiedBranch, setCopiedBranch] = useState(false)
 
-    // Compute permissions
     const canEditAll = ['admin', 'pm', 'tester', 'developer'].includes(currentUserRole || '')
     const canDelete = ['admin', 'pm'].includes(currentUserRole || '')
-    const canPostComment = true // All project members can comment usually
+    const canPostComment = true
 
     const formatValue = (action: string, value: string | null) => {
         if (!value || value === 'null' || value === 'None') return 'None'
@@ -83,7 +93,6 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
         if (taskError) console.error("Error loading task:", taskError)
         setTask(taskData)
 
-        // Fetch project members for assignment
         const { data: membersData } = await supabase
             .from('project_members')
             .select(`
@@ -98,7 +107,6 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
             if (meta) setCurrentUserRole(meta.project_role)
         }
 
-        // Fetch comments
         const { data: commentsData } = await supabase
             .from('task_comments')
             .select(`*, profiles(display_name, avatar_url)`)
@@ -107,7 +115,6 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
 
         setComments(commentsData || [])
 
-        // Fetch activity logs
         const { data: activityData } = await supabase
             .from('task_activity_log')
             .select(`*, profiles(display_name, avatar_url)`)
@@ -117,7 +124,197 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
 
         setActivity(activityData || [])
 
+        const { data: subTasksData } = await supabase
+            .from('tasks')
+            .select('*')
+            .eq('parent_id', taskId)
+            .order('created_at', { ascending: true })
+
+        setSubTasks(subTasksData || [])
+
+        const { data: epicsData } = await supabase
+            .from('epics')
+            .select('id, name')
+            .eq('project_id', projectId)
+        
+        setEpics(epicsData || [])
+
+        // Load development links
+        const { data: branchesData } = await supabase
+            .from('branch_task_links')
+            .select('branches(*)')
+            .eq('task_id', taskId)
+        
+        if (branchesData) {
+            setBranches(branchesData.map((d: any) => d.branches).filter(Boolean))
+        }
+
+        const { data: commitsData } = await supabase
+            .from('commit_task_links')
+            .select('commits(*)')
+            .eq('task_id', taskId)
+        
+        if (commitsData) {
+            setCommits(commitsData.map((d: any) => d.commits).filter(Boolean))
+        }
+
         setLoading(false)
+    }
+
+    // SLA Calculation
+    const getSLADetails = () => {
+        if (!task) return null
+        let slaHours = 0
+        switch (task.priority) {
+            case 'urgent': slaHours = 24; break;
+            case 'high': slaHours = 48; break;
+            case 'medium': slaHours = 24 * 7; break;
+            case 'low': slaHours = 24 * 14; break;
+            default: slaHours = 48;
+        }
+
+        const createdTime = new Date(task.created_at).getTime()
+        const deadlineTime = createdTime + (slaHours * 60 * 60 * 1000)
+        
+        if (task.resolved_at) {
+            const resolvedTime = new Date(task.resolved_at).getTime()
+            return {
+                status: resolvedTime <= deadlineTime ? 'met' : 'breached_resolved',
+                text: resolvedTime <= deadlineTime ? 'SLA Met' : 'SLA Breached',
+                color: resolvedTime <= deadlineTime ? 'text-[#006644] bg-[#E3FCEF]' : 'text-[#DE350B] bg-[#FFEBE6]'
+            }
+        }
+
+        const now = new Date().getTime()
+        const remaining = deadlineTime - now
+
+        if (remaining < 0) {
+            const hoursBreached = Math.floor(Math.abs(remaining) / (1000 * 60 * 60))
+            return {
+                status: 'breached',
+                text: `Breached by ${hoursBreached}h`,
+                color: 'text-[#DE350B] bg-[#FFEBE6]'
+            }
+        }
+
+        const hoursLeft = Math.floor(remaining / (1000 * 60 * 60))
+        if (hoursLeft < 24) {
+            return {
+                status: 'warning',
+                text: `${hoursLeft}h remaining`,
+                color: 'text-[#FF8B00] bg-[#FFFAE6]'
+            }
+        }
+        
+        const daysLeft = Math.floor(hoursLeft / 24)
+        return {
+            status: 'ok',
+            text: `${daysLeft}d remaining`,
+            color: 'text-[#0052CC] bg-[#DEEBFF]'
+        }
+    }
+
+    async function handleLogWork() {
+        if (!task || !taskId || !logWorkTime) return
+        
+        // simple parsing of "2h 30m" to minutes
+        const timeStr = logWorkTime.toLowerCase()
+        let minutes = 0
+        const hoursMatch = timeStr.match(/(\d+)\s*h/)
+        const minsMatch = timeStr.match(/(\d+)\s*m/)
+        
+        if (hoursMatch) minutes += parseInt(hoursMatch[1]) * 60
+        if (minsMatch) minutes += parseInt(minsMatch[1])
+        
+        // If they just typed a number, assume minutes
+        if (!hoursMatch && !minsMatch && !isNaN(parseInt(timeStr))) {
+            minutes += parseInt(timeStr)
+        }
+
+        if (minutes > 0) {
+            const newTotal = (task.time_spent || 0) + minutes
+            await updateField('time_spent', newTotal.toString())
+            setLogWorkOpen(false)
+            setLogWorkTime('')
+        }
+    }
+
+    async function handleCreateBranch() {
+        if (!task) return
+        const safeTitle = task.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+        const branchName = `feature/${task.task_display_id}-${safeTitle}`
+        const gitCommand = `git checkout -b ${branchName}`
+        
+        navigator.clipboard.writeText(gitCommand)
+        setCopiedBranch(true)
+        setTimeout(() => setCopiedBranch(false), 2000)
+
+        // Save to DB
+        const { data: branchData } = await supabase
+            .from('branches')
+            .insert({ project_id: projectId, name: branchName })
+            .select()
+            .single()
+
+        if (branchData) {
+            await supabase.from('branch_task_links').insert({ branch_id: branchData.id, task_id: taskId })
+            setBranches([...branches, branchData])
+        }
+    }
+
+    async function handleLinkCommit() {
+        if (!commitUrl || !taskId) return
+        // Mock linking a commit (in real app, fetch SHA from GitHub API)
+        const sha = commitUrl.substring(commitUrl.length - 7) || 'unknown'
+        
+        const { data: commitData } = await supabase
+            .from('commits')
+            .insert({ project_id: projectId, sha, message: `Linked commit ${sha}`, url: commitUrl })
+            .select()
+            .single()
+
+        if (commitData) {
+            await supabase.from('commit_task_links').insert({ commit_id: commitData.id, task_id: taskId })
+            setCommits([...commits, commitData])
+        }
+        setLinkCommitOpen(false)
+        setCommitUrl('')
+    }
+
+    async function handleBreakDownWithAI() {
+        if (!taskId || !task) return
+        setIsBreakingDown(true)
+        try {
+            // Mock AI behavior for breaking down a task
+            const newTasks = [
+                {
+                    project_id: projectId,
+                    parent_id: taskId,
+                    title: `[Sub-task 1] - Initial setup for ${task.title.substring(0, 20)}...`,
+                    description: 'Generated by AI',
+                    priority: task.priority,
+                    status: 'todo',
+                    task_number: Math.floor(Math.random() * 1000) + 1000,
+                    task_display_id: `SUB-${Math.floor(Math.random() * 1000)}`
+                },
+                {
+                    project_id: projectId,
+                    parent_id: taskId,
+                    title: `[Sub-task 2] - Implementation for ${task.title.substring(0, 20)}...`,
+                    description: 'Generated by AI',
+                    priority: task.priority,
+                    status: 'todo',
+                    task_number: Math.floor(Math.random() * 1000) + 1000,
+                    task_display_id: `SUB-${Math.floor(Math.random() * 1000)}`
+                }
+            ]
+            
+            await supabase.from('tasks').insert(newTasks)
+            await loadData()
+            onUpdate()
+        } finally {
+            setIsBreakingDown(false)
+        }
     }
 
     async function handleAddComment() {
@@ -138,7 +335,6 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
             setCommentError(error.message)
         } else {
             setNewComment('')
-            // Optimistic refresh
             loadData()
         }
         setSubmittingComment(false)
@@ -149,26 +345,36 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
 
         const oldValue = task[field]
 
+        // Check for resolution
+        const isResolving = (field === 'status' && (value === 'done' || value === 'resolved'))
+        const isUnresolving = (field === 'status' && (value !== 'done' && value !== 'resolved') && task.status === 'done')
+        
+        let extraUpdate = {}
+        if (isResolving && !task.resolved_at) {
+            extraUpdate = { resolved_at: new Date().toISOString() }
+        } else if (isUnresolving) {
+            extraUpdate = { resolved_at: null }
+        }
+
         const { error } = await supabase
             .from('tasks')
-            .update({ [field]: value })
+            .update({ [field]: field === 'story_points' || field === 'original_estimate' || field === 'time_spent' ? parseInt(value as string) || 0 : value, ...extraUpdate })
             .eq('id', taskId)
 
         if (!error) {
-            // Log activity manually if not handled by triggers (since there's no DB trigger for activity yet)
             await supabase
                 .from('task_activity_log')
                 .insert({
                     task_id: taskId,
                     user_id: user?.id,
                     action: `${field}_changed`,
-                    old_value: oldValue || 'None',
-                    new_value: value || 'None'
+                    old_value: oldValue ? oldValue.toString() : 'None',
+                    new_value: value ? value.toString() : 'None'
                 })
 
-            setTask({ ...task, [field]: value })
+            setTask({ ...task, [field]: field === 'story_points' || field === 'original_estimate' || field === 'time_spent' ? parseInt(value as string) || 0 : value })
             onUpdate()
-            loadData() // refresh logs
+            loadData()
         }
     }
 
@@ -191,280 +397,416 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
 
     if (!taskId) return null
 
+    const selectClasses = "w-full bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#172B4D] border-transparent transition-colors rounded-[3px] focus:ring-[#4C9AFF]"
+
     return (
         <Dialog open={!!taskId} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent showCloseButton={false} className="sm:max-w-[900px] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden bg-white border-zinc-200 shadow-xl">
+            <DialogContent showCloseButton={false} className="sm:max-w-[1040px] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden bg-white border-0 shadow-[0_8px_16px_-4px_rgba(9,30,66,0.25),0_0_1px_rgba(9,30,66,0.31)] rounded-[3px]">
                 {loading || !task ? (
-                    <div className="flex-1 flex items-center justify-center bg-zinc-50/50">
-                        <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
+                    <div className="flex-1 flex items-center justify-center bg-[#FAFBFC]">
+                        <Loader2 className="h-8 w-8 animate-spin text-[#0052CC]" />
                     </div>
                 ) : (
                     <>
-                        {/* Header */}
-                        <div className="p-6 border-b border-zinc-200 bg-zinc-50 flex justify-between items-start">
-                            <div>
-                                <div className="flex items-center gap-3 mb-2">
-                                    <span className="text-sm font-mono text-zinc-600 bg-white border border-zinc-200 shadow-sm px-2 py-1 rounded">
-                                        {task.task_display_id}
-                                    </span>
+                        <div className="px-6 py-4 flex justify-between items-start flex-shrink-0 border-b border-[#DFE1E6]">
+                            <div className="flex flex-col gap-1">
+                                <div className="text-[12px] font-medium text-[#5E6C84]">
+                                    {task.task_display_id}
                                 </div>
-                                <DialogTitle className="text-2xl font-semibold text-zinc-900">
+                                <DialogTitle className="text-2xl font-medium text-[#172B4D]">
                                     {task.title}
                                 </DialogTitle>
                             </div>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-2">
                                 {canDelete && (
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
+                                    <button
                                         onClick={handleDeleteTask}
-                                        className="h-9 w-9 text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                        className="p-2 text-[#5E6C84] hover:text-[#DE350B] hover:bg-[#FFEBE6] rounded-[3px] transition-colors"
                                         title="Delete Task"
                                     >
-                                        <Trash2 className="h-[18px] w-[18px]" />
-                                    </Button>
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
                                 )}
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
+                                <button
                                     onClick={onClose}
-                                    className="h-9 w-9 text-zinc-400 hover:text-zinc-900 transition-colors"
+                                    className="p-2 text-[#5E6C84] hover:text-[#172B4D] hover:bg-[#EBECF0] rounded-[3px] transition-colors"
                                     title="Close"
                                 >
                                     <X className="h-5 w-5" />
-                                </Button>
+                                </button>
                             </div>
                         </div>
 
-                        {/* Body layout */}
                         <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-white">
-                            {/* Main Content (Left) */}
-                            <div className="w-[60%] flex flex-col h-full overflow-y-auto border-r border-zinc-200 p-6 space-y-8 no-scrollbar bg-white">
-                                {/* Description */}
+                            <div className="w-[65%] flex flex-col h-full overflow-y-auto border-r border-[#DFE1E6] p-6 space-y-8 no-scrollbar bg-white">
                                 <section>
-                                    <h3 className="text-xs font-semibold text-zinc-500 mb-4 uppercase tracking-widest flex items-center gap-2">
+                                    <h3 className="text-[14px] font-semibold text-[#172B4D] mb-4">
                                         Description
                                     </h3>
-                                    <div className="text-zinc-700 whitespace-pre-wrap text-sm leading-relaxed bg-zinc-50 p-5 rounded-2xl border border-zinc-200 shadow-sm">
+                                    <div className="text-[#172B4D] whitespace-pre-wrap text-sm leading-relaxed p-2 -mx-2 hover:bg-[#FAFBFC] rounded transition-colors cursor-text">
                                         {task.description || 'No description provided.'}
                                     </div>
                                 </section>
 
-                                {/* Comments Section */}
+                                <section>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-[14px] font-semibold text-[#172B4D]">
+                                            Sub-tasks
+                                        </h3>
+                                        <button
+                                            onClick={handleBreakDownWithAI}
+                                            disabled={isBreakingDown || !canEditAll}
+                                            className="text-sm bg-[#EAE6FF] hover:bg-[#403294] hover:text-white text-[#403294] px-3 py-1.5 rounded-[3px] font-semibold transition-colors flex items-center gap-1.5 shadow-sm"
+                                        >
+                                            {isBreakingDown ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                                            Break down with AI
+                                        </button>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {subTasks.map(st => (
+                                            <div key={st.id} className="flex items-center justify-between p-2.5 border border-[#DFE1E6] rounded-[3px] bg-white hover:bg-[#FAFBFC] transition-colors cursor-pointer">
+                                                <div className="flex items-center gap-3">
+                                                    <GitBranch className="w-4 h-4 text-[#0052CC]" />
+                                                    <span className="text-xs text-[#5E6C84] w-16">{st.task_display_id}</span>
+                                                    <span className="text-[13px] text-[#172B4D]">{st.title}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-[#DFE1E6] text-[#42526E]">
+                                                        {st.status}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {subTasks.length === 0 && (
+                                            <div className="text-[13px] text-[#5E6C84] border border-[#DFE1E6] border-dashed rounded-[3px] p-4 text-center">
+                                                No sub-tasks yet. Click "Break down with AI" to auto-generate sub-tasks.
+                                            </div>
+                                        )}
+                                    </div>
+                                </section>
+
                                 <section className="flex-1 flex flex-col">
-                                    <h3 className="text-sm font-medium text-zinc-500 mb-4 uppercase tracking-wider flex items-center gap-2">
-                                        <MessageSquare className="h-4 w-4" /> Discussion
+                                    <h3 className="text-[14px] font-semibold text-[#172B4D] mb-4">
+                                        Activity
                                     </h3>
 
                                     <div className="flex-1 overflow-y-auto mb-6 pr-2 no-scrollbar min-h-[200px]">
-                                        <div className="space-y-4">
+                                        <div className="space-y-6">
                                             {comments.map(c => (
-                                                <div key={c.id} className="flex gap-4 group">
+                                                <div key={c.id} className="flex gap-4">
                                                     <div className="flex-shrink-0 mt-1">
                                                         {c.profiles?.avatar_url ? (
-                                                            <img src={c.profiles.avatar_url} className="h-9 w-9 rounded-full ring-2 ring-white shadow-sm" alt="avatar" />
+                                                            <img src={c.profiles.avatar_url} className="h-8 w-8 rounded-full" alt="avatar" />
                                                         ) : (
-                                                            <div className="h-9 w-9 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs border border-blue-200">
+                                                            <div className="h-8 w-8 rounded-full bg-[#0052CC] text-white flex items-center justify-center font-bold text-[11px]">
                                                                 {c.profiles?.display_name?.charAt(0) || '?'}
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <div className="flex-1 bg-white rounded-2xl p-4 border border-zinc-200 shadow-sm group-hover:border-zinc-300 transition-all duration-200">
-                                                        <div className="flex items-center justify-between mb-1.5">
-                                                            <span className="text-sm font-semibold text-zinc-900">{c.profiles?.display_name}</span>
-                                                            <span className="text-[11px] text-zinc-500 flex items-center gap-1.5 font-medium">
-                                                                <Clock className="h-3 w-3" />
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="text-[14px] font-semibold text-[#172B4D]">{c.profiles?.display_name}</span>
+                                                            <span className="text-[12px] text-[#5E6C84]">
                                                                 {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
                                                             </span>
                                                         </div>
-                                                        <div className="text-sm text-zinc-700 whitespace-pre-wrap leading-relaxed">{c.content}</div>
+                                                        <div className="text-sm text-[#172B4D] whitespace-pre-wrap leading-relaxed">{c.content}</div>
                                                     </div>
                                                 </div>
                                             ))}
                                             {comments.length === 0 && (
-                                                <div className="flex flex-col items-center justify-center p-12 bg-zinc-50 rounded-2xl border border-dashed border-zinc-200">
-                                                    <MessageSquare className="h-8 w-8 text-zinc-400 mb-3 opacity-50" />
-                                                    <p className="text-sm text-zinc-500 font-medium">No comments yet</p>
-                                                    <p className="text-xs text-zinc-400 mt-1">Be the first to start the discussion</p>
-                                                </div>
+                                                <div className="text-[14px] text-[#5E6C84]">No comments yet.</div>
                                             )}
                                         </div>
                                     </div>
 
-                                    <div className="mt-auto pt-4 border-t border-zinc-200 bg-white">
-                                        <div className="relative">
+                                    <div className="mt-auto flex gap-4">
+                                        {user?.user_metadata?.avatar_url ? (
+                                            <img src={user.user_metadata.avatar_url} className="h-8 w-8 rounded-full" alt="avatar" />
+                                        ) : (
+                                            <div className="h-8 w-8 rounded-full bg-[#0052CC] text-white flex items-center justify-center font-bold text-[11px] shrink-0 mt-1">
+                                                {user?.email?.charAt(0).toUpperCase() || '?'}
+                                            </div>
+                                        )}
+                                        <div className="flex-1 border border-[#DFE1E6] rounded-[3px] overflow-hidden focus-within:border-[#4C9AFF] focus-within:ring-1 focus-within:ring-[#4C9AFF]">
                                             <Textarea
-                                                placeholder="Write a comment..."
+                                                placeholder="Add a comment..."
                                                 value={newComment}
                                                 onChange={(e) => {
                                                     setNewComment(e.target.value)
                                                     if (commentError) setCommentError(null)
                                                 }}
-                                                className="min-h-[100px] mb-3 bg-white border-zinc-200 text-zinc-900 focus:border-blue-500/50 focus:ring-blue-500/10 transition-shadow resize-none rounded-xl"
+                                                className="min-h-[80px] bg-white border-none text-[#172B4D] resize-y focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none text-sm"
                                             />
-                                            {commentError && (
-                                                <div className="absolute top-2 right-2 text-[10px] text-red-600 bg-red-50 px-2 py-1 rounded border border-red-200">
-                                                    Failed to post: {commentError}
+                                            <div className="bg-[#FAFBFC] border-t border-[#DFE1E6] px-3 py-2 flex items-center justify-between">
+                                                <span className="text-xs text-[#DE350B]">{commentError}</span>
+                                                <div className="flex justify-end gap-2">
+                                                    <button
+                                                        disabled={submittingComment || !newComment.trim()}
+                                                        onClick={handleAddComment}
+                                                        className="bg-[#0052CC] hover:bg-[#0047B3] disabled:opacity-50 text-white rounded-[3px] px-4 py-1.5 font-medium text-sm transition-colors flex items-center gap-2"
+                                                    >
+                                                        {submittingComment && <Loader2 className="h-3 w-3 animate-spin" />}
+                                                        Save
+                                                    </button>
                                                 </div>
-                                            )}
-                                        </div>
-                                        <div className="flex justify-end items-center gap-4">
-                                            {commentError && <span className="text-xs text-red-600 font-medium">Try again or check your permissions</span>}
-                                            <Button
-                                                disabled={submittingComment || !newComment.trim()}
-                                                onClick={handleAddComment}
-                                                className="bg-blue-600 hover:bg-blue-700 text-white border-none shadow-sm px-6"
-                                            >
-                                                {submittingComment ? (
-                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                ) : (
-                                                    <MessageSquare className="mr-2 h-4 w-4" />
-                                                )}
-                                                {canPostComment ? 'Comment' : 'Read Only'}
-                                            </Button>
+                                            </div>
                                         </div>
                                     </div>
                                 </section>
                             </div>
 
-                            {/* Sidebar (Right) */}
-                            <div className="w-[40%] bg-zinc-50 p-6 flex flex-col h-full overflow-y-auto no-scrollbar space-y-6">
-                                {/* Attributes */}
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="text-xs text-zinc-500 font-medium mb-1.5 block uppercase tracking-wider">Status</label>
-                                        <Select
-                                            value={task.status}
-                                            onValueChange={(val) => updateField('status', val)}
-                                            disabled={!canEditAll}
-                                        >
-                                            <SelectTrigger className="w-full bg-white text-zinc-900 border-zinc-200 disabled:opacity-50">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="todo">To Do</SelectItem>
-                                                <SelectItem value="in_progress">In Progress</SelectItem>
-                                                <SelectItem value="in_review">In Review</SelectItem>
-                                                <SelectItem value="done">Done</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
+                            <div className="w-[35%] p-6 flex flex-col h-full overflow-y-auto no-scrollbar space-y-6">
+                                <div className="space-y-1">
+                                    <Select
+                                        value={task.status}
+                                        onValueChange={(val) => updateField('status', val)}
+                                        disabled={!canEditAll}
+                                    >
+                                        <SelectTrigger className="w-fit bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#42526E] font-medium border-none h-8 text-[12px] uppercase">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="todo">TO DO</SelectItem>
+                                            <SelectItem value="in_progress">IN PROGRESS</SelectItem>
+                                            <SelectItem value="in_review">IN REVIEW</SelectItem>
+                                            <SelectItem value="done">DONE</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
 
-                                    <div>
-                                        <label className="text-xs text-zinc-500 font-medium mb-1.5 block uppercase tracking-wider">Assignee</label>
-                                        <Select
-                                            value={task.assigned_to || 'unassigned'}
-                                            onValueChange={(val) => updateField('assigned_to', val === 'unassigned' ? null : val)}
-                                            disabled={!canEditAll}
-                                        >
-                                            <SelectTrigger className="w-full bg-white border-zinc-200 text-zinc-900 disabled:opacity-50">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="unassigned" className="text-zinc-400 italic">Unassigned</SelectItem>
-                                                {members.map(m => (
-                                                    <SelectItem key={m.id} value={m.id}>
-                                                        <div className="flex items-center gap-2">
-                                                            {m.avatar_url ? (
-                                                                <img src={m.avatar_url} className="h-4 w-4 rounded-full" />
-                                                            ) : (
-                                                                <UserPlus className="h-4 w-4 text-zinc-400" />
-                                                            )}
-                                                            {m.display_name}
-                                                        </div>
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                <div className="border border-[#DFE1E6] rounded-[3px]">
+                                    <div className="p-3 border-b border-[#DFE1E6] font-medium text-[14px] text-[#172B4D]">
+                                        Details
                                     </div>
+                                    <div className="p-3 space-y-4">
+                                        <div className="flex items-center">
+                                            <label className="text-[12px] font-semibold text-[#5E6C84] w-1/3">Assignee</label>
+                                            <div className="w-2/3">
+                                                <Select
+                                                    value={task.assigned_to || 'unassigned'}
+                                                    onValueChange={(val) => updateField('assigned_to', val === 'unassigned' ? null : val)}
+                                                    disabled={!canEditAll}
+                                                >
+                                                    <SelectTrigger className={selectClasses}>
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="unassigned" className="text-[#5E6C84]">Unassigned</SelectItem>
+                                                        {members.map(m => (
+                                                            <SelectItem key={m.id} value={m.id}>
+                                                                <div className="flex items-center gap-2">
+                                                                    {m.avatar_url ? (
+                                                                        <img src={m.avatar_url} className="h-5 w-5 rounded-full" />
+                                                                    ) : (
+                                                                        <UserPlus className="h-4 w-4 text-[#5E6C84]" />
+                                                                    )}
+                                                                    {m.display_name}
+                                                                </div>
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
 
-                                    <div>
-                                        <label className="text-xs text-zinc-500 font-medium mb-1.5 block uppercase tracking-wider">Priority</label>
-                                        <Select
-                                            value={task.priority}
-                                            onValueChange={(val) => updateField('priority', val)}
-                                            disabled={!canEditAll}
-                                        >
-                                            <SelectTrigger className="w-full bg-white text-zinc-900 border-zinc-200 disabled:opacity-50">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="urgent">Urgent</SelectItem>
-                                                <SelectItem value="high">High</SelectItem>
-                                                <SelectItem value="medium">Medium</SelectItem>
-                                                <SelectItem value="low">Low</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
+                                        <div className="flex items-center">
+                                            <label className="text-[12px] font-semibold text-[#5E6C84] w-1/3">Priority</label>
+                                            <div className="w-2/3">
+                                                <Select
+                                                    value={task.priority}
+                                                    onValueChange={(val) => updateField('priority', val)}
+                                                    disabled={!canEditAll}
+                                                >
+                                                    <SelectTrigger className={selectClasses}>
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="urgent"><div className="flex items-center gap-2"><ArrowUp className="w-4 h-4 text-[#DE350B]" /> Highest</div></SelectItem>
+                                                        <SelectItem value="high"><div className="flex items-center gap-2"><ArrowUp className="w-4 h-4 text-[#FF5630]" /> High</div></SelectItem>
+                                                        <SelectItem value="medium"><div className="flex items-center gap-2"><Minus className="w-4 h-4 text-[#FFAB00]" /> Medium</div></SelectItem>
+                                                        <SelectItem value="low"><div className="flex items-center gap-2"><ArrowDown className="w-4 h-4 text-[#0065FF]" /> Low</div></SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
 
-                                    <div className="pt-4 border-t border-zinc-200">
-                                        <div className="text-xs text-zinc-500 mb-1">Created by</div>
-                                        <div className="flex items-center gap-2 text-sm text-zinc-700">
-                                            {task.creator?.avatar_url && <img src={task.creator.avatar_url} className="h-5 w-5 rounded-full" />}
-                                            {task.creator?.display_name || 'Unknown'}
+                                        <div className="flex items-center">
+                                            <label className="text-[12px] font-semibold text-[#5E6C84] w-1/3">Story Points</label>
+                                            <div className="w-2/3">
+                                                <input 
+                                                    type="number" 
+                                                    value={task.story_points || ''} 
+                                                    onChange={(e) => setTask({ ...task, story_points: e.target.value })}
+                                                    onBlur={(e) => updateField('story_points', e.target.value)}
+                                                    className={`${selectClasses} px-3 py-1.5 outline-none`}
+                                                    placeholder="0"
+                                                    disabled={!canEditAll}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center">
+                                            <label className="text-[12px] font-semibold text-[#5E6C84] w-1/3">Epic Link</label>
+                                            <div className="w-2/3">
+                                                <Select
+                                                    value={task.epic_id || 'unassigned'}
+                                                    onValueChange={(val) => updateField('epic_id', val === 'unassigned' ? null : val)}
+                                                    disabled={!canEditAll}
+                                                >
+                                                    <SelectTrigger className={selectClasses}>
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="unassigned" className="text-[#5E6C84]">None</SelectItem>
+                                                        {epics.map(e => (
+                                                            <SelectItem key={e.id} value={e.id}>
+                                                                {e.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center">
+                                            <label className="text-[12px] font-semibold text-[#5E6C84] w-1/3 flex items-center gap-1">SLA <Clock className="w-3 h-3" /></label>
+                                            <div className="w-2/3">
+                                                {(() => {
+                                                    const sla = getSLADetails()
+                                                    if (!sla) return <span className="text-xs text-[#5E6C84]">-</span>
+                                                    return (
+                                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-[3px] text-[11px] font-bold ${sla.color}`}>
+                                                            {sla.text}
+                                                        </span>
+                                                    )
+                                                })()}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Activity Log (Mini) */}
-                                <div className="flex-1 min-h-[300px] border-t border-zinc-200 pt-6">
-                                    <h3 className="text-xs font-semibold text-zinc-500 mb-5 uppercase tracking-widest flex items-center gap-2">
-                                        <Activity className="h-3.5 w-3.5 text-blue-500" /> Recent Activity
-                                    </h3>
-                                    <div className="space-y-6">
-                                        {activity.map((act, i) => {
-                                            const isStatus = act.action.includes('status')
-                                            const isPriority = act.action.includes('priority')
-                                            const isAssignee = act.action.includes('assigned')
-
-                                            return (
-                                                <div key={act.id} className="relative pl-6 group">
-                                                    {/* Timeline connector */}
-                                                    {i !== activity.length - 1 && (
-                                                        <div className="absolute left-[7px] top-4 bottom-[-24px] w-[1px] bg-zinc-200 group-hover:bg-zinc-300 transition-colors" />
-                                                    )}
-
-                                                    {/* Icon dot */}
-                                                    <div className={`absolute left-0 top-1 h-3.5 w-3.5 rounded-full ring-4 ring-zinc-50 flex items-center justify-center transition-all duration-300 ${isStatus ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]' :
-                                                        isPriority ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]' :
-                                                            isAssignee ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.3)]' :
-                                                                'bg-zinc-400'
-                                                        }`}>
-                                                        <div className="h-1.5 w-1.5 rounded-full bg-white/60" />
+                                <div className="border border-[#DFE1E6] rounded-[3px]">
+                                    <div className="p-3 border-b border-[#DFE1E6] font-medium text-[14px] text-[#172B4D]">
+                                        Development
+                                    </div>
+                                    <div className="p-3 space-y-4">
+                                        {branches.length > 0 && (
+                                            <div className="space-y-2">
+                                                <div className="text-[12px] font-semibold text-[#5E6C84]">Branches</div>
+                                                {branches.map(b => (
+                                                    <div key={b.id} className="flex items-center gap-2 text-sm">
+                                                        <GitBranch className="w-4 h-4 text-[#5E6C84]" />
+                                                        <span className="text-[#0052CC] hover:underline cursor-pointer truncate">{b.name}</span>
                                                     </div>
-
-                                                    <div className="text-xs text-zinc-500">
-                                                        <div className="flex items-center gap-1.5 mb-1">
-                                                            <span className="font-bold text-zinc-900">{act.profiles?.display_name || 'System'}</span>
-                                                            <span className="text-zinc-500">updated</span>
-                                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${isStatus ? 'bg-emerald-50 text-emerald-600' :
-                                                                isPriority ? 'bg-amber-50 text-amber-600' :
-                                                                    isAssignee ? 'bg-blue-50 text-blue-600' :
-                                                                        'bg-zinc-100 text-zinc-600'
-                                                                }`}>
-                                                                {act.action.replace('_changed', '').replace('_', ' ')}
-                                                            </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {commits.length > 0 && (
+                                            <div className="space-y-2">
+                                                <div className="text-[12px] font-semibold text-[#5E6C84]">Commits</div>
+                                                {commits.map(c => (
+                                                    <div key={c.id} className="flex items-center justify-between text-sm group">
+                                                        <div className="flex items-center gap-2 overflow-hidden">
+                                                            <GitCommit className="w-4 h-4 text-[#5E6C84]" />
+                                                            <span className="text-[#0052CC] hover:underline cursor-pointer truncate" title={c.message}>{c.message}</span>
                                                         </div>
-
-                                                        <div className="bg-white border border-zinc-200 rounded-lg p-2 mt-1.5 shadow-sm group-hover:border-zinc-300 transition-colors">
-                                                            <span className="text-zinc-500 italic">{formatValue(act.action, act.old_value)}</span>
-                                                            <span className="mx-2 text-zinc-400 font-mono">&rarr;</span>
-                                                            <span className="text-zinc-900 font-medium">{formatValue(act.action, act.new_value)}</span>
-                                                        </div>
-
-                                                        <div className="text-[10px] text-zinc-500 mt-2 flex items-center gap-1 font-medium">
-                                                            <Clock className="h-2.5 w-2.5" />
-                                                            {formatDistanceToNow(new Date(act.created_at), { addSuffix: true })}
-                                                        </div>
+                                                        <span className="text-xs text-[#5E6C84] font-mono shrink-0 ml-2">{c.sha}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        
+                                        <div className="flex flex-col gap-2 pt-2 border-t border-[#DFE1E6]">
+                                            <button 
+                                                onClick={handleCreateBranch}
+                                                className="text-sm bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#172B4D] px-3 py-1.5 rounded-[3px] font-medium transition-colors border border-[#DFE1E6] flex items-center justify-center gap-2"
+                                            >
+                                                {copiedBranch ? <CheckSquare className="w-4 h-4 text-[#006644]" /> : <GitBranch className="w-4 h-4 text-[#5E6C84]" />}
+                                                {copiedBranch ? 'Copied Command!' : 'Create branch'}
+                                            </button>
+                                            
+                                            {linkCommitOpen ? (
+                                                <div className="space-y-2 border border-[#DFE1E6] p-2 rounded-[3px] bg-[#FAFBFC]">
+                                                    <input 
+                                                        type="text" 
+                                                        placeholder="GitHub commit URL"
+                                                        value={commitUrl}
+                                                        onChange={(e) => setCommitUrl(e.target.value)}
+                                                        className={`${selectClasses} px-3 py-1.5 outline-none bg-white`}
+                                                    />
+                                                    <div className="flex justify-end gap-2">
+                                                        <button onClick={() => setLinkCommitOpen(false)} className="text-[12px] text-[#5E6C84] hover:underline">Cancel</button>
+                                                        <button onClick={handleLinkCommit} className="text-[12px] bg-[#0052CC] text-white px-2 py-0.5 rounded-[3px] hover:bg-[#0047B3]">Link</button>
                                                     </div>
                                                 </div>
-                                            )
-                                        })}
-                                        {activity.length === 0 && (
-                                            <div className="flex flex-col items-center justify-center p-8 bg-white rounded-xl border border-dashed border-zinc-200 shadow-sm">
-                                                <Activity className="h-6 w-6 text-zinc-300 mb-2 opacity-50" />
-                                                <p className="text-[10px] text-zinc-500 font-medium">No activity recorded</p>
+                                            ) : (
+                                                <button 
+                                                    onClick={() => setLinkCommitOpen(true)}
+                                                    className="w-full text-center text-[13px] text-[#0052CC] hover:bg-[#DEEBFF] py-1 rounded-[3px] transition-colors"
+                                                >
+                                                    Link commit
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="border border-[#DFE1E6] rounded-[3px]">
+                                    <div className="p-3 border-b border-[#DFE1E6] font-medium text-[14px] text-[#172B4D]">
+                                        Time Tracking
+                                    </div>
+                                    <div className="p-3 space-y-4">
+                                        <div className="flex items-center">
+                                            <label className="text-[12px] font-semibold text-[#5E6C84] w-1/3">Estimate</label>
+                                            <div className="w-2/3 flex items-center gap-2">
+                                                <input 
+                                                    type="number" 
+                                                    value={task.original_estimate || ''} 
+                                                    onChange={(e) => setTask({ ...task, original_estimate: e.target.value })}
+                                                    onBlur={(e) => updateField('original_estimate', e.target.value)}
+                                                    className={`${selectClasses} px-3 py-1.5 outline-none w-20`}
+                                                    placeholder="0"
+                                                    disabled={!canEditAll}
+                                                />
+                                                <span className="text-[12px] text-[#5E6C84]">minutes</span>
                                             </div>
+                                        </div>
+
+                                        <div className="space-y-1.5">
+                                            <div className="flex justify-between text-[12px] text-[#5E6C84]">
+                                                <span>Logged: {task.time_spent || 0}m</span>
+                                                <span>Remaining: {Math.max(0, (task.original_estimate || 0) - (task.time_spent || 0))}m</span>
+                                            </div>
+                                            <div className="h-1.5 w-full bg-[#DFE1E6] rounded-full overflow-hidden">
+                                                <div 
+                                                    className="h-full bg-[#0052CC]" 
+                                                    style={{ width: `${Math.min(100, (task.time_spent || 0) / (task.original_estimate || 1) * 100)}%` }}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {logWorkOpen ? (
+                                            <div className="space-y-2 border border-[#DFE1E6] p-2 rounded-[3px] bg-[#FAFBFC]">
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="e.g. 2h 30m"
+                                                    value={logWorkTime}
+                                                    onChange={(e) => setLogWorkTime(e.target.value)}
+                                                    className={`${selectClasses} px-3 py-1.5 outline-none bg-white`}
+                                                />
+                                                <div className="flex justify-end gap-2">
+                                                    <button onClick={() => setLogWorkOpen(false)} className="text-[12px] text-[#5E6C84] hover:underline">Cancel</button>
+                                                    <button onClick={handleLogWork} className="text-[12px] bg-[#0052CC] text-white px-2 py-0.5 rounded-[3px] hover:bg-[#0047B3]">Save</button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <button 
+                                                onClick={() => setLogWorkOpen(true)}
+                                                className="w-full text-center text-[13px] text-[#0052CC] hover:bg-[#DEEBFF] py-1 rounded-[3px] transition-colors"
+                                            >
+                                                Log Work
+                                            </button>
                                         )}
                                     </div>
                                 </div>

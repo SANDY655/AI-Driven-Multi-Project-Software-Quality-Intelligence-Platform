@@ -8,7 +8,6 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
@@ -49,7 +48,6 @@ export function CreateProjectModal({ onSuccess }: { onSuccess: () => void }) {
         },
     })
 
-    // Token resolution: PAT field > OAuth provider_token > unauthenticated
     const resolveToken = (pat?: string): string | undefined => {
         if (pat && pat.trim().length > 0) return pat.trim()
         if (session?.provider_token) return session.provider_token
@@ -61,16 +59,13 @@ export function CreateProjectModal({ onSuccess }: { onSuccess: () => void }) {
 
         setLoading(true)
         try {
-            // 1. Validate GitHub URL
             const repoInfo = extractOwnerAndRepo(values.githubUrl)
             if (!repoInfo) throw new Error('Invalid GitHub repository URL format.')
 
             const token = resolveToken(values.githubPat)
 
-            // 2. Fetch repo details from GitHub (token required for private repos)
             const details = await getRepoDetails(token, repoInfo.owner, repoInfo.repo)
 
-            // 3. Insert project into Supabase
             const { data: project, error: projectError } = await supabase
                 .from('projects')
                 .insert({
@@ -87,7 +82,6 @@ export function CreateProjectModal({ onSuccess }: { onSuccess: () => void }) {
 
             if (projectError) throw projectError
 
-            // 4. Add the creator as an Admin in project_members
             const { error: memberError } = await supabase
                 .from('project_members')
                 .insert({
@@ -98,14 +92,11 @@ export function CreateProjectModal({ onSuccess }: { onSuccess: () => void }) {
 
             if (memberError) throw memberError
 
-            // Save the token to localStorage so the dashboard can auto-fetch
-            // collaborators and contributors without the user re-entering it.
             const resolvedToken = resolveToken(values.githubPat)
             if (resolvedToken) {
                 localStorage.setItem(`github_pat_${project.id}`, resolvedToken)
             }
 
-            // Success!
             setOpen(false)
             form.reset()
             setShowPatField(false)
@@ -113,7 +104,6 @@ export function CreateProjectModal({ onSuccess }: { onSuccess: () => void }) {
         } catch (error: any) {
             console.error(error)
 
-            // Duplicate project code constraint violation
             if (
                 error?.code === '23505' ||
                 (error?.message && error.message.includes('projects_project_code_key'))
@@ -124,7 +114,6 @@ export function CreateProjectModal({ onSuccess }: { onSuccess: () => void }) {
                 return
             }
 
-            // Private repo accessed without a token
             if (error?.status === 404 || error?.message?.includes('Not Found')) {
                 form.setError('githubUrl', {
                     message: 'Repository not found. If it is private, provide a GitHub Personal Access Token with "repo" scope.',
@@ -132,7 +121,6 @@ export function CreateProjectModal({ onSuccess }: { onSuccess: () => void }) {
                 return
             }
 
-            // Forbidden — token exists but lacks access
             if (error?.status === 403) {
                 form.setError('githubUrl', {
                     message: 'Access denied. Make sure your token has the "repo" scope and you are a collaborator on this repository.',
@@ -140,139 +128,141 @@ export function CreateProjectModal({ onSuccess }: { onSuccess: () => void }) {
                 return
             }
 
-            // Generic fallback
             form.setError('githubUrl', { message: error.message || 'Failed to sync with GitHub.' })
         } finally {
             setLoading(false)
         }
     }
 
+    const inputClasses = "w-full rounded-[3px] border border-[#DFE1E6] bg-[#FAFBFC] hover:bg-[#EBECF0] focus:bg-white focus:border-[#4C9AFF] focus:ring-1 focus:ring-[#4C9AFF] transition-colors text-sm px-3 py-2 text-[#172B4D] placeholder:text-[#A5ADBA] focus-visible:ring-1 focus-visible:ring-offset-0 focus-visible:ring-[#4C9AFF]"
+
     return (
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { form.reset(); setShowPatField(false) } }}>
             <DialogTrigger asChild>
-                <Button className="gap-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-semibold h-11 px-6">
-                    <Plus className="h-4 w-4" />
-                    New Project
-                </Button>
+                <button className="bg-[#0052CC] hover:bg-[#0047B3] text-white px-4 py-2 rounded-[3px] font-medium text-sm transition-colors shadow-sm flex items-center gap-2">
+                    Create Project
+                </button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[480px] rounded-[24px] p-6 bg-white border-zinc-100 shadow-xl gap-5">
-                <DialogHeader className="space-y-2 pb-1">
-                    <DialogTitle className="text-xl font-bold tracking-tight text-zinc-900">Create New Project</DialogTitle>
-                    <DialogDescription className="text-[15px] text-zinc-500">
-                        Link a GitHub repository to start tracking bugs and SLA metrics automatically. Supports both public and private repositories.
-                    </DialogDescription>
+            <DialogContent className="sm:max-w-[600px] p-0 bg-white border-0 shadow-[0_8px_16px_-4px_rgba(9,30,66,0.25),0_0_1px_rgba(9,30,66,0.31)] rounded-[3px] gap-0 overflow-hidden flex flex-col max-h-[90vh]">
+                <DialogHeader className="px-6 py-5 border-b border-[#DFE1E6] flex flex-row items-center justify-between flex-shrink-0">
+                    <DialogTitle className="text-[20px] font-medium text-[#172B4D]">Create project</DialogTitle>
                 </DialogHeader>
 
-                <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-                        <FormField
-                            control={form.control}
-                            name="name"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-sm font-semibold text-zinc-900">Project Name</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="E.g. E-Commerce API" className="rounded-xl border-zinc-200 focus-visible:ring-zinc-900 h-11 text-base placeholder:text-zinc-400" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+                <div className="overflow-y-auto flex-1 px-6 py-5">
+                    <p className="text-[14px] text-[#5E6C84] mb-6">
+                        Link a GitHub repository to start tracking bugs and SLA metrics automatically.
+                    </p>
 
-                        <FormField
-                            control={form.control}
-                            name="projectCode"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-sm font-semibold text-zinc-900">Project Code</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="E.g. ECOM" className="rounded-xl border-zinc-200 focus-visible:ring-zinc-900 h-11 text-base placeholder:text-zinc-400" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase())} />
-                                    </FormControl>
-                                    <FormDescription className="text-xs text-zinc-500">Used as a prefix for bug IDs (e.g. BUG-ECOM-1)</FormDescription>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+                    <Form {...form}>
+                        <form id="create-project-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+                            <FormField
+                                control={form.control}
+                                name="name"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider mb-1">Project Name<span className="text-[#DE350B] ml-1">*</span></FormLabel>
+                                        <FormControl>
+                                            <input placeholder="E.g. E-Commerce API" className={inputClasses} {...field} />
+                                        </FormControl>
+                                        <FormMessage className="text-[#DE350B] text-xs" />
+                                    </FormItem>
+                                )}
+                            />
 
-                        <FormField
-                            control={form.control}
-                            name="githubUrl"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-sm font-semibold text-zinc-900">GitHub Repository URL</FormLabel>
-                                    <FormControl>
-                                        <div className="relative">
-                                            <Github className="absolute left-3.5 top-3.5 h-4 w-4 text-zinc-400" />
-                                            <Input placeholder="https://github.com/owner/repo" className="pl-10 rounded-xl border-zinc-200 focus-visible:ring-zinc-900 h-11 text-base placeholder:text-zinc-400" {...field} />
-                                        </div>
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+                            <FormField
+                                control={form.control}
+                                name="projectCode"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider mb-1">Project Key<span className="text-[#DE350B] ml-1">*</span></FormLabel>
+                                        <FormControl>
+                                            <input placeholder="E.g. ECOM" className={inputClasses} {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase())} />
+                                        </FormControl>
+                                        <FormDescription className="text-xs text-[#5E6C84]">Used as a prefix for issue IDs (e.g. ECOM-1)</FormDescription>
+                                        <FormMessage className="text-[#DE350B] text-xs" />
+                                    </FormItem>
+                                )}
+                            />
 
-                        {/* PAT field toggle */}
-                        <div>
-                            <button
-                                type="button"
-                                onClick={() => setShowPatField(v => !v)}
-                                className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-700 transition-colors"
-                            >
-                                <Lock className="h-3 w-3" />
-                                {showPatField ? 'Hide' : 'Private repo?'} {!showPatField && '— Add GitHub Token'}
-                            </button>
+                            <FormField
+                                control={form.control}
+                                name="githubUrl"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider mb-1">GitHub Repository URL<span className="text-[#DE350B] ml-1">*</span></FormLabel>
+                                        <FormControl>
+                                            <div className="relative">
+                                                <Github className="absolute left-3.5 top-2.5 h-4 w-4 text-[#A5ADBA]" />
+                                                <input placeholder="https://github.com/owner/repo" className={`${inputClasses} pl-10`} {...field} />
+                                            </div>
+                                        </FormControl>
+                                        <FormMessage className="text-[#DE350B] text-xs" />
+                                    </FormItem>
+                                )}
+                            />
 
-                            {showPatField && (
-                                <FormField
-                                    control={form.control}
-                                    name="githubPat"
-                                    render={({ field }) => (
-                                        <FormItem className="mt-3">
-                                            <FormLabel className="flex items-center gap-1.5">
-                                                <KeyRound className="h-3.5 w-3.5 text-amber-600" />
-                                                GitHub Personal Access Token
-                                            </FormLabel>
-                                            <FormControl>
-                                                <Input
-                                                    type="password"
-                                                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                                                    className="rounded-xl border-zinc-200 focus-visible:ring-zinc-900 h-11 text-base placeholder:text-zinc-400"
-                                                    {...field}
-                                                />
-                                            </FormControl>
-                                            <FormDescription className="text-xs text-zinc-500">
-                                                Required for private repos. Needs <code className="bg-amber-50 px-1 rounded text-amber-700 border border-amber-200">repo</code> scope. Token is used once and never stored.
-                                                {session?.provider_token && (
-                                                    <span className="block mt-1 text-emerald-600 font-medium">✓ Your GitHub OAuth token will be used automatically if this field is empty.</span>
-                                                )}
-                                            </FormDescription>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                            )}
-                        </div>
+                            <div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPatField(v => !v)}
+                                    className="flex items-center gap-1.5 text-xs text-[#5E6C84] hover:text-[#172B4D] hover:underline transition-colors mt-2"
+                                >
+                                    <Lock className="h-3 w-3" />
+                                    {showPatField ? 'Hide token field' : 'Connect a private repository?'}
+                                </button>
 
-                        <div className="pt-4 flex justify-end gap-3 border-t border-zinc-100 mt-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setOpen(false)}
-                                className="rounded-xl h-10 px-6 font-semibold border-zinc-200 text-zinc-700 hover:bg-zinc-50"
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                type="submit"
-                                disabled={loading}
-                                className="rounded-xl h-10 px-8 font-semibold bg-[#6345FF] text-white hover:bg-[#5235E8]"
-                            >
-                                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Create & Sync
-                            </Button>
-                        </div>
-                    </form>
-                </Form>
+                                {showPatField && (
+                                    <FormField
+                                        control={form.control}
+                                        name="githubPat"
+                                        render={({ field }) => (
+                                            <FormItem className="mt-3">
+                                                <FormLabel className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                                                    <KeyRound className="h-3.5 w-3.5 text-[#FFAB00]" />
+                                                    GitHub Personal Access Token
+                                                </FormLabel>
+                                                <FormControl>
+                                                    <input
+                                                        type="password"
+                                                        placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                                                        className={inputClasses}
+                                                        {...field}
+                                                    />
+                                                </FormControl>
+                                                <FormDescription className="text-xs text-[#5E6C84] mt-1">
+                                                    Required for private repos. Needs <code className="bg-[#FFFAE6] px-1 rounded text-[#FF8B00] border border-[#FFE380]">repo</code> scope. Token is used once and never stored.
+                                                    {session?.provider_token && (
+                                                        <span className="block mt-1 text-[#006644] font-medium">✓ Your GitHub OAuth token will be used automatically if this field is empty.</span>
+                                                    )}
+                                                </FormDescription>
+                                                <FormMessage className="text-[#DE350B] text-xs" />
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
+                            </div>
+                        </form>
+                    </Form>
+                </div>
+
+                <div className="px-6 py-4 border-t border-[#DFE1E6] bg-[#FAFBFC] flex justify-end gap-2 flex-shrink-0">
+                    <button
+                        type="button"
+                        onClick={() => setOpen(false)}
+                        className="px-4 py-2 text-[#42526E] hover:bg-[#EBECF0] rounded-[3px] font-medium text-sm transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        form="create-project-form"
+                        disabled={loading}
+                        className="px-4 py-2 bg-[#0052CC] hover:bg-[#0047B3] text-white rounded-[3px] font-medium text-sm transition-colors flex items-center gap-2"
+                    >
+                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Create
+                    </button>
+                </div>
             </DialogContent>
         </Dialog>
     )
