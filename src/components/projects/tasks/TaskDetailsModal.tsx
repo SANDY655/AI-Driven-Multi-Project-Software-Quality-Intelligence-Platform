@@ -6,10 +6,14 @@ import {
     Dialog,
     DialogContent,
     DialogTitle,
+    DialogDescription
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { X, CheckSquare, MessageSquare, Plus, Trash2, ArrowUp, ArrowDown, Minus, UserPlus, Loader2, Link2, GitBranch, GitCommit, Copy, ExternalLink, Clock, Sparkles } from 'lucide-react'
+import { X, UserPlus, Loader2, GitBranch, GitCommit, Clock, Github, FileCode2, Trash2, Sparkles, ArrowUp, ArrowDown, Minus } from 'lucide-react'
+import { ConnectGithubModal } from '../dev-tools/ConnectGithubModal'
+import { CreateBranchModal } from '../dev-tools/CreateBranchModal'
+import { CreateCommitModal } from '../dev-tools/CreateCommitModal'
 
 interface TaskDetailsModalProps {
     taskId: string | null
@@ -19,28 +23,15 @@ interface TaskDetailsModalProps {
     onUpdate: () => void
 }
 
-const PRIORITY_LABELS: Record<string, string> = {
-    urgent: 'Highest',
-    high: 'High',
-    medium: 'Medium',
-    low: 'Low'
-}
-
-const STATUS_LABELS: Record<string, string> = {
-    todo: 'To Do',
-    in_progress: 'In Progress',
-    in_review: 'In Review',
-    done: 'Done'
-}
-
 export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole, onClose, onUpdate }: TaskDetailsModalProps) {
     const { user } = useAuth()
     const [task, setTask] = useState<any>(null)
     const [comments, setComments] = useState<any[]>([])
-    const [activity, setActivity] = useState<any[]>([])
     const [members, setMembers] = useState<any[]>([])
     const [newComment, setNewComment] = useState('')
     const [loading, setLoading] = useState(true)
+    const { session } = useAuth()
+    const [project, setProject] = useState<any>(null)
     const [submittingComment, setSubmittingComment] = useState(false)
     const [commentError, setCommentError] = useState<string | null>(null)
     const [currentUserRole, setCurrentUserRole] = useState<string | undefined>(initialUserRole)
@@ -53,24 +44,15 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
     // Development tracking
     const [branches, setBranches] = useState<any[]>([])
     const [commits, setCommits] = useState<any[]>([])
-    const [linkCommitOpen, setLinkCommitOpen] = useState(false)
-    const [commitUrl, setCommitUrl] = useState('')
-    const [copiedBranch, setCopiedBranch] = useState(false)
+    
+    // Dev Tools modals
+    const [connectGithubOpen, setConnectGithubOpen] = useState(false)
+    const [createBranchOpen, setCreateBranchOpen] = useState(false)
+    const [createCommitOpen, setCreateCommitOpen] = useState(false)
+    
 
     const canEditAll = ['admin', 'pm', 'tester', 'developer'].includes(currentUserRole || '')
     const canDelete = ['admin', 'pm'].includes(currentUserRole || '')
-    const canPostComment = true
-
-    const formatValue = (action: string, value: string | null) => {
-        if (!value || value === 'null' || value === 'None') return 'None'
-        if (action.includes('status')) return STATUS_LABELS[value] || value
-        if (action.includes('priority')) return PRIORITY_LABELS[value] || value
-        if (action.includes('assigned')) {
-            const member = members.find(m => m.id === value)
-            return member?.display_name || 'User'
-        }
-        return value
-    }
 
     useEffect(() => {
         if (!taskId) return
@@ -115,15 +97,6 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
 
         setComments(commentsData || [])
 
-        const { data: activityData } = await supabase
-            .from('task_activity_log')
-            .select(`*, profiles(display_name, avatar_url)`)
-            .eq('task_id', taskId)
-            .order('created_at', { ascending: false })
-            .limit(20)
-
-        setActivity(activityData || [])
-
         const { data: subTasksData } = await supabase
             .from('tasks')
             .select('*')
@@ -138,6 +111,14 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
             .eq('project_id', projectId)
         
         setEpics(epicsData || [])
+
+        const { data: projData } = await supabase
+            .from('projects')
+            .select('github_owner, github_repo')
+            .eq('id', projectId)
+            .single()
+            
+        if (projData) setProject(projData)
 
         // Load development links
         const { data: branchesData } = await supabase
@@ -237,48 +218,6 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
             setLogWorkOpen(false)
             setLogWorkTime('')
         }
-    }
-
-    async function handleCreateBranch() {
-        if (!task) return
-        const safeTitle = task.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-        const branchName = `feature/${task.task_display_id}-${safeTitle}`
-        const gitCommand = `git checkout -b ${branchName}`
-        
-        navigator.clipboard.writeText(gitCommand)
-        setCopiedBranch(true)
-        setTimeout(() => setCopiedBranch(false), 2000)
-
-        // Save to DB
-        const { data: branchData } = await supabase
-            .from('branches')
-            .insert({ project_id: projectId, name: branchName })
-            .select()
-            .single()
-
-        if (branchData) {
-            await supabase.from('branch_task_links').insert({ branch_id: branchData.id, task_id: taskId })
-            setBranches([...branches, branchData])
-        }
-    }
-
-    async function handleLinkCommit() {
-        if (!commitUrl || !taskId) return
-        // Mock linking a commit (in real app, fetch SHA from GitHub API)
-        const sha = commitUrl.substring(commitUrl.length - 7) || 'unknown'
-        
-        const { data: commitData } = await supabase
-            .from('commits')
-            .insert({ project_id: projectId, sha, message: `Linked commit ${sha}`, url: commitUrl })
-            .select()
-            .single()
-
-        if (commitData) {
-            await supabase.from('commit_task_links').insert({ commit_id: commitData.id, task_id: taskId })
-            setCommits([...commits, commitData])
-        }
-        setLinkCommitOpen(false)
-        setCommitUrl('')
     }
 
     async function handleBreakDownWithAI() {
@@ -402,6 +341,7 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
     return (
         <Dialog open={!!taskId} onOpenChange={(open) => !open && onClose()}>
             <DialogContent showCloseButton={false} className="sm:max-w-[1040px] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden bg-white border-0 shadow-[0_8px_16px_-4px_rgba(9,30,66,0.25),0_0_1px_rgba(9,30,66,0.31)] rounded-[3px]">
+                <DialogDescription className="sr-only">Task Details</DialogDescription>
                 {loading || !task ? (
                     <div className="flex-1 flex items-center justify-center bg-[#FAFBFC]">
                         <Loader2 className="h-8 w-8 animate-spin text-[#0052CC]" />
@@ -718,36 +658,54 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                                         )}
                                         
                                         <div className="flex flex-col gap-2 pt-2 border-t border-[#DFE1E6]">
-                                            <button 
-                                                onClick={handleCreateBranch}
-                                                className="text-sm bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#172B4D] px-3 py-1.5 rounded-[3px] font-medium transition-colors border border-[#DFE1E6] flex items-center justify-center gap-2"
-                                            >
-                                                {copiedBranch ? <CheckSquare className="w-4 h-4 text-[#006644]" /> : <GitBranch className="w-4 h-4 text-[#5E6C84]" />}
-                                                {copiedBranch ? 'Copied Command!' : 'Create branch'}
-                                            </button>
-                                            
-                                            {linkCommitOpen ? (
-                                                <div className="space-y-2 border border-[#DFE1E6] p-2 rounded-[3px] bg-[#FAFBFC]">
-                                                    <input 
-                                                        type="text" 
-                                                        placeholder="GitHub commit URL"
-                                                        value={commitUrl}
-                                                        onChange={(e) => setCommitUrl(e.target.value)}
-                                                        className={`${selectClasses} px-3 py-1.5 outline-none bg-white`}
-                                                    />
-                                                    <div className="flex justify-end gap-2">
-                                                        <button onClick={() => setLinkCommitOpen(false)} className="text-[12px] text-[#5E6C84] hover:underline">Cancel</button>
-                                                        <button onClick={handleLinkCommit} className="text-[12px] bg-[#0052CC] text-white px-2 py-0.5 rounded-[3px] hover:bg-[#0047B3]">Link</button>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <button 
-                                                    onClick={() => setLinkCommitOpen(true)}
-                                                    className="w-full text-center text-[13px] text-[#0052CC] hover:bg-[#DEEBFF] py-1 rounded-[3px] transition-colors"
-                                                >
-                                                    Link commit
-                                                </button>
-                                            )}
+                                            {(() => {
+                                                const githubToken = session?.provider_token || localStorage.getItem(`github_pat_${projectId}`)
+                                                const isGithubConnected = !!githubToken && !!project?.github_owner && !!project?.github_repo
+
+                                                if (!isGithubConnected && project?.github_owner) {
+                                                    return (
+                                                        <button 
+                                                            onClick={() => setConnectGithubOpen(true)}
+                                                            className="text-sm bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#172B4D] px-3 py-1.5 rounded-[3px] font-medium transition-colors border border-[#DFE1E6] flex items-center justify-center gap-2"
+                                                        >
+                                                            <Github className="w-4 h-4 text-[#5E6C84]" />
+                                                            Connect GitHub
+                                                        </button>
+                                                    )
+                                                }
+
+                                                return (
+                                                    <>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <button 
+                                                                onClick={() => setCreateBranchOpen(true)}
+                                                                disabled={!isGithubConnected}
+                                                                className="text-[13px] bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#172B4D] px-2 py-1.5 rounded-[3px] font-medium transition-colors border border-[#DFE1E6] flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                                            >
+                                                                <GitBranch className="w-3.5 h-3.5 text-[#5E6C84]" />
+                                                                Create branch
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => setCreateCommitOpen(true)}
+                                                                disabled={!isGithubConnected}
+                                                                className="text-[13px] bg-[#FAFBFC] hover:bg-[#EBECF0] text-[#172B4D] px-2 py-1.5 rounded-[3px] font-medium transition-colors border border-[#DFE1E6] flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                                            >
+                                                                <GitCommit className="w-3.5 h-3.5 text-[#5E6C84]" />
+                                                                Create commit
+                                                            </button>
+                                                        </div>
+                                                        {isGithubConnected && (
+                                                            <a 
+                                                                href={`vscode://vscode.git/clone?url=https://github.com/${project.github_owner}/${project.github_repo}.git`}
+                                                                className="w-full text-center text-[13px] text-[#0052CC] hover:bg-[#DEEBFF] py-1.5 rounded-[3px] transition-colors flex items-center justify-center gap-2 mt-1"
+                                                            >
+                                                                <FileCode2 className="w-3.5 h-3.5" />
+                                                                Open in VS Code
+                                                            </a>
+                                                        )}
+                                                    </>
+                                                )
+                                            })()}
                                         </div>
                                     </div>
                                 </div>
@@ -815,6 +773,42 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                     </>
                 )}
             </DialogContent>
+            
+            {connectGithubOpen && project?.github_owner && project?.github_repo && (
+                <ConnectGithubModal
+                    projectId={projectId}
+                    githubOwner={project.github_owner}
+                    githubRepo={project.github_repo}
+                    onClose={() => setConnectGithubOpen(false)}
+                    onSuccess={() => {
+                        setConnectGithubOpen(false)
+                        // Trigger a re-render to pick up new token
+                        setProject({...project}) 
+                    }}
+                />
+            )}
+
+            {createBranchOpen && project?.github_owner && project?.github_repo && (
+                <CreateBranchModal
+                    projectId={projectId}
+                    issueId={taskId!}
+                    issueDisplayId={task?.task_display_id || ''}
+                    issueTitle={task?.title || ''}
+                    isTask={true}
+                    githubToken={session?.provider_token || localStorage.getItem(`github_pat_${projectId}`) || ''}
+                    githubOwner={project.github_owner}
+                    githubRepo={project.github_repo}
+                    onClose={() => setCreateBranchOpen(false)}
+                    onSuccess={loadData}
+                />
+            )}
+
+            {createCommitOpen && (
+                <CreateCommitModal
+                    issueDisplayId={task?.task_display_id || ''}
+                    onClose={() => setCreateCommitOpen(false)}
+                />
+            )}
         </Dialog>
     )
 }

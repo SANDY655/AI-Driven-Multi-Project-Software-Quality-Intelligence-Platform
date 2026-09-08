@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
-import { ArrowUp, ArrowDown, Minus, ArrowRight, User as UserIcon, FileText, GitCommit, Trash2, Edit2, Share2, MoreHorizontal } from 'lucide-react'
+import { ArrowUp, ArrowDown, Minus, ArrowRight, User as UserIcon, GitCommit, Trash2, Edit2, Share2, MoreHorizontal } from 'lucide-react'
 import { BugComments } from '@/components/projects/bugs/BugComments'
-import { BugActivityTimeline } from '@/components/projects/bugs/BugActivityTimeline'
 import { BugDetailsModal } from '@/components/projects/BugDetailsModal'
 
 export function BugDetailPage() {
@@ -16,7 +15,6 @@ export function BugDetailPage() {
     const [project, setProject] = useState<any>(null)
     const [loading, setLoading] = useState(true)
     const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
-    const [childDuplicates, setChildDuplicates] = useState<any[]>([])
     const [isEditModalOpen, setIsEditModalOpen] = useState(false)
 
     useEffect(() => {
@@ -52,12 +50,6 @@ export function BugDetailPage() {
             setBug(bugData)
 
             // Fetch child duplicates
-            const { data: childDups } = await supabase
-                .from('bugs')
-                .select('bug_display_id, title')
-                .eq('duplicate_of', bugId)
-            setChildDuplicates(childDups || [])
-
             // Fetch current user project role
             if (user) {
                 const { data: memberData } = await supabase

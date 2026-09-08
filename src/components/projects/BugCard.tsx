@@ -11,6 +11,7 @@ export interface Bug {
     created_at: string
     resolved_at?: string
     assigned_to?: string
+    sprint_id?: string
     assignee?: {
         display_name: string
         avatar_url: string
@@ -33,13 +34,13 @@ export function BugCard({ bug, index, onClick }: BugCardProps) {
     const renderPriorityIcon = (priority: string) => {
         switch(priority) {
             case 'P0':
-                return <ArrowUp className="w-4 h-4 text-[#DE350B]" title="Highest" />
+                return <ArrowUp className="w-4 h-4 text-[#DE350B]" />
             case 'P1':
-                return <ArrowUp className="w-4 h-4 text-[#FF5630]" title="High" />
+                return <ArrowUp className="w-4 h-4 text-[#FF5630]" />
             case 'P2':
-                return <Minus className="w-4 h-4 text-[#FFAB00]" title="Medium" />
+                return <Minus className="w-4 h-4 text-[#FFAB00]" />
             case 'P3':
-                return <ArrowDown className="w-4 h-4 text-[#0065FF]" title="Low" />
+                return <ArrowDown className="w-4 h-4 text-[#0065FF]" />
             default:
                 return <ArrowRight className="w-4 h-4 text-[#5E6C84]" />
         }
@@ -95,14 +96,14 @@ export function BugCard({ bug, index, onClick }: BugCardProps) {
                         {bug.title}
                     </div>
 
-                    {(bug.epic || bug.story_points > 0) && (
+                    {(bug.epic || (bug.story_points ?? 0) > 0) && (
                         <div className="flex flex-wrap gap-2 items-center mb-3">
                             {bug.epic && (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded-[3px] text-[11px] font-bold text-white bg-[#8777D9] leading-none">
                                     {bug.epic.name}
                                 </span>
                             )}
-                            {bug.story_points > 0 && (
+                            {(bug.story_points ?? 0) > 0 && (
                                 <span className="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded-full text-[11px] font-bold text-[#172B4D] bg-[#DFE1E6] leading-none">
                                     {bug.story_points}
                                 </span>
@@ -119,7 +120,7 @@ export function BugCard({ bug, index, onClick }: BugCardProps) {
                                 {bug.bug_display_id}
                             </span>
                             {renderPriorityIcon(bug.priority)}
-                            {sla && <Clock className={`w-3.5 h-3.5 ${sla.color}`} title={sla.title} />}
+                            {sla && <Clock className={`w-3.5 h-3.5 ${sla.color}`} />}
                         </div>
                         
                         <div className="flex items-center">

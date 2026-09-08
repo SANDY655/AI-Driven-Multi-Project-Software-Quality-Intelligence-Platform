@@ -4,14 +4,12 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { 
     Bug, 
-    LogOut, 
     LayoutDashboard, 
     Loader2, 
     Settings,
     Search,
     Bell,
     ChevronDown,
-    Plus,
     KanbanSquare,
     ListTodo,
     BarChart2,

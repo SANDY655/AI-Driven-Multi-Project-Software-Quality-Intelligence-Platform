@@ -9,7 +9,7 @@ import { EditProjectModal } from '../components/projects/EditProjectModal'
 import { CreateBugModal } from '../components/projects/CreateBugModal'
 import { CreateTaskModal } from '../components/projects/tasks/CreateTaskModal'
 import { Button } from '@/components/ui/button'
-import { Github, Users, Bug, AlertCircle, Trash2, ExternalLink, CheckSquare, Lock, ShieldCheck, Activity } from 'lucide-react'
+import { Github, Users, Bug, AlertCircle, Trash2, CheckSquare, Lock, ShieldCheck } from 'lucide-react'
 
 interface Project {
     id: string
@@ -57,17 +57,14 @@ export function ProjectDashboard() {
     const navigate = useNavigate()
     const { user, session } = useAuth()
     const [project, setProject] = useState<Project | null>(null)
-    const [contributors, setContributors] = useState<any[]>([])
     const [collaborators, setCollaborators] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
-    const [githubToken, setGithubToken] = useState<string | undefined>(undefined)
 
     const fetchGitHubData = async (owner: string, repo: string, token?: string) => {
-        const [contribs, collabs] = await Promise.all([
+        const [, collabs] = await Promise.all([
             getRepoContributors(owner, repo, token),
             getRepoCollaborators(owner, repo, token),
         ])
-        setContributors(contribs)
         setCollaborators(collabs)
     }
 
@@ -101,7 +98,6 @@ export function ProjectDashboard() {
                     localStorage.getItem(`github_pat_${data.id}`) ||
                     undefined
 
-                setGithubToken(token)
                 await fetchGitHubData(data.github_owner, data.github_repo, token)
             }
             setLoading(false)

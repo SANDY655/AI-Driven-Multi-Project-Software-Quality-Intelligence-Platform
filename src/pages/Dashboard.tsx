@@ -3,14 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { CreateProjectModal } from '../components/projects/CreateProjectModal'
-import { FolderGit2, CircleDashed, Briefcase, CheckCircle2, AlertCircle, Clock } from 'lucide-react'
-
-interface Profile {
-    display_name: string
-    role: string
-    github_username: string | null
-    avatar_url: string | null
-}
+import { FolderGit2, Briefcase, CheckCircle2, AlertCircle } from 'lucide-react'
 
 interface Project {
     id: string
@@ -36,7 +29,6 @@ interface AssignedItem {
 export function Dashboard() {
     const { user } = useAuth()
     const navigate = useNavigate()
-    const [profile, setProfile] = useState<Profile | null>(null)
     const [projects, setProjects] = useState<Project[]>([])
     const [assignedItems, setAssignedItems] = useState<AssignedItem[]>([])
     const [loading, setLoading] = useState(true)
@@ -46,14 +38,6 @@ export function Dashboard() {
         if (!user) return
 
         // Load profile
-        const { data: profileData } = await supabase
-            .from('profiles')
-            .select('display_name, role, github_username, avatar_url')
-            .eq('id', user.id)
-            .single()
-
-        if (profileData) setProfile(profileData)
-
         // Load projects this user is a member of
         const { data: projectsData, error: projErr } = await supabase
             .from('projects')
@@ -139,7 +123,7 @@ export function Dashboard() {
         )
     }
 
-    const getStatusBadge = (status: string, type: 'bug' | 'task') => {
+    const getStatusBadge = (status: string) => {
         const normalizedStatus = status.toLowerCase();
         let bg = 'bg-[#DFE1E6]';
         let text = 'text-[#42526E]';
@@ -263,7 +247,7 @@ export function Dashboard() {
                                             {item.title}
                                         </td>
                                         <td className="py-2.5 px-4">
-                                            {getStatusBadge(item.status, item.type)}
+                                            {getStatusBadge(item.status)}
                                         </td>
                                         <td className="py-2.5 px-4 text-xs text-[#5E6C84] text-right">
                                             {new Date(item.updated_at).toLocaleDateString()}

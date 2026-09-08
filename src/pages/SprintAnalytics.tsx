@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { TrendingDown, Activity, BarChart3, PieChart as PieChartIcon, Loader2 } from 'lucide-react'
+import { TrendingDown, Activity, BarChart3, Loader2 } from 'lucide-react'
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell,
-  BarChart, Bar
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
+  PieChart, Pie, Cell
 } from 'recharts'
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -95,7 +94,7 @@ export function SprintAnalytics() {
     let actual: number | null = null
     if (i <= currentDay) {
         const drop = (totalTasks - remainingToday) / currentDay
-        actual = totalTasks - (drop * i) + (Math.random() * 1.5 - 0.75)
+        actual = totalTasks - (drop * i)
         if (i === currentDay) actual = remainingToday
         if (i === 0) actual = totalTasks
     }

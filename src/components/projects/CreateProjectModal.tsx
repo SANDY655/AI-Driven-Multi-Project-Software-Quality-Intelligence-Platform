@@ -21,9 +21,7 @@ import {
     FormLabel,
     FormMessage,
 } from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
-import { Loader2, Plus, Github, Lock, KeyRound } from 'lucide-react'
+import { Loader2, Github, Lock, KeyRound } from 'lucide-react'
 
 const formSchema = z.object({
     name: z.string().min(2, 'Project name must be at least 2 characters.'),

@@ -20,10 +20,9 @@ import {
     FormLabel,
     FormMessage,
 } from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Loader2, Bug, Sparkles, AlertTriangle, ArrowUp, ArrowDown, Minus, ArrowRight } from 'lucide-react'
+import { Loader2, Sparkles, AlertTriangle, ArrowUp, ArrowDown, Minus } from 'lucide-react'
 
 const formSchema = z.object({
     title: z.string().min(5, 'Title must be at least 5 characters.'),
@@ -33,7 +32,7 @@ const formSchema = z.object({
     assigned_to: z.string().optional().nullable(),
     duplicate_of: z.string().optional().nullable(),
     epic_id: z.string().optional().nullable(),
-    story_points: z.coerce.number().min(0).max(100).optional(),
+    story_points: z.number().min(0).max(100).optional(),
     labels: z.string().optional(),
     environment: z.string().optional(),
 })
@@ -281,7 +280,8 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
                                             <div className="relative">
                                                 <FormControl>
                                                     <Textarea
-                                                        {...field}
+                                                        value={field.value ?? ''}
+                                                        onChange={(event) => field.onChange(event.target.value === '' ? undefined : Number(event.target.value))}
                                                         placeholder="Add a detailed description..."
                                                         className={`${inputClasses} min-h-[150px] resize-y`}
                                                     />

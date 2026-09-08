@@ -19,10 +19,9 @@ import {
     FormLabel,
     FormMessage,
 } from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Loader2, CheckSquare, ArrowUp, ArrowDown, Minus, ArrowRight } from 'lucide-react'
+import { Loader2, CheckSquare, ArrowUp, ArrowDown, Minus } from 'lucide-react'
 
 const formSchema = z.object({
     title: z.string().min(5, 'Title must be at least 5 characters.'),
@@ -31,7 +30,7 @@ const formSchema = z.object({
     sprint_id: z.string().optional(),
     parent_id: z.string().optional(),
     epic_id: z.string().optional(),
-    story_points: z.coerce.number().min(0).max(100).optional(),
+    story_points: z.number().min(0).max(100).optional(),
     labels: z.string().optional(),
 })
 
@@ -59,7 +58,7 @@ export function CreateTaskModal({ projectId, projectCode, onSuccess }: CreateTas
             })
             supabase.from('epics').select('id, name').eq('project_id', projectId).then(({ data }) => {
                 if (data) setEpics(data)
-            }).catch(() => {})
+            })
         }
     }, [open, projectId])
 
@@ -228,7 +227,8 @@ export function CreateTaskModal({ projectId, projectCode, onSuccess }: CreateTas
                                             <FormLabel className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider mb-1">Labels</FormLabel>
                                             <FormControl>
                                                 <input
-                                                    {...field}
+                                                    value={field.value ?? ''}
+                                                    onChange={(event) => field.onChange(event.target.value === '' ? undefined : Number(event.target.value))}
                                                     placeholder="e.g. backend, database, refactor"
                                                     className={inputClasses}
                                                 />

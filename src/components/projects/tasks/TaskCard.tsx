@@ -8,6 +8,7 @@ export interface Task {
     priority: string
     status: string
     created_at: string
+    resolved_at?: string
     due_date?: string
     assigned_to?: string
     sprint_id?: string
@@ -35,11 +36,11 @@ export function TaskCard({ task, index, onClick }: TaskCardProps) {
         switch(priority) {
             case 'urgent':
             case 'high':
-                return <ArrowUp className="w-4 h-4 text-[#DE350B]" title={priority} />
+                return <ArrowUp className="w-4 h-4 text-[#DE350B]" />
             case 'medium':
-                return <Minus className="w-4 h-4 text-[#FFAB00]" title={priority} />
+                return <Minus className="w-4 h-4 text-[#FFAB00]" />
             case 'low':
-                return <ArrowDown className="w-4 h-4 text-[#0065FF]" title={priority} />
+                return <ArrowDown className="w-4 h-4 text-[#0065FF]" />
             default:
                 return <ArrowRight className="w-4 h-4 text-[#5E6C84]" />
         }
@@ -95,14 +96,14 @@ export function TaskCard({ task, index, onClick }: TaskCardProps) {
                         {task.title}
                     </div>
 
-                    {(task.epic || task.story_points > 0) && (
+                    {(task.epic || (task.story_points ?? 0) > 0) && (
                         <div className="flex flex-wrap gap-2 items-center mb-3">
                             {task.epic && (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded-[3px] text-[11px] font-bold text-white bg-[#8777D9] leading-none">
                                     {task.epic.name}
                                 </span>
                             )}
-                            {task.story_points > 0 && (
+                            {(task.story_points ?? 0) > 0 && (
                                 <span className="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded-full text-[11px] font-bold text-[#172B4D] bg-[#DFE1E6] leading-none">
                                     {task.story_points}
                                 </span>
@@ -119,7 +120,7 @@ export function TaskCard({ task, index, onClick }: TaskCardProps) {
                                 {task.task_display_id}
                             </span>
                             {renderPriorityIcon(task.priority)}
-                            {sla && <Clock className={`w-3.5 h-3.5 ${sla.color}`} title={sla.title} />}
+                            {sla && <Clock className={`w-3.5 h-3.5 ${sla.color}`} />}
                         </div>
                         
                         <div className="flex items-center">

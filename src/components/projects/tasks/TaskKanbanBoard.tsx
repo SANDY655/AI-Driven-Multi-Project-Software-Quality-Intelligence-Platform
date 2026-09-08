@@ -51,7 +51,7 @@ export function TaskKanbanBoard({ projectId, refreshTrigger = 0, userRole, sprin
     }, [projectId, refreshTrigger, sprintId])
 
     async function loadColumns() {
-        const { data, error } = await supabase.from('project_statuses').select('*').eq('project_id', projectId).order('position', { ascending: true })
+        const { data } = await supabase.from('project_statuses').select('*').eq('project_id', projectId).order('position', { ascending: true })
         if (data && data.length > 0) {
             setColumns(data)
         } else {
@@ -103,8 +103,8 @@ export function TaskKanbanBoard({ projectId, refreshTrigger = 0, userRole, sprin
 
         try {
             const [tasksRes, bugsRes] = await Promise.all([
-                tasksQuery.order('created_at', { ascending: false }).then(res => res).catch(() => ({ data: [], error: null })),
-                bugsQuery.order('created_at', { ascending: false }).then(res => res).catch(() => ({ data: [], error: null }))
+                tasksQuery.order('created_at', { ascending: false }),
+                bugsQuery.order('created_at', { ascending: false })
             ])
 
             const combined: Issue[] = []
@@ -142,9 +142,11 @@ export function TaskKanbanBoard({ projectId, refreshTrigger = 0, userRole, sprin
         // Optimistic update
         const updatedIssues = [...issues]
         const sourceIndex = updatedIssues.findIndex(i => i.id === draggableId)
-        updatedIssues[sourceIndex] = {
-            ...updatedIssues[sourceIndex],
-            data: { ...updatedIssues[sourceIndex].data, status: newStatus }
+        const issue = updatedIssues[sourceIndex]
+        if (issue.type === 'task') {
+            updatedIssues[sourceIndex] = { ...issue, data: { ...issue.data, status: newStatus } }
+        } else {
+            updatedIssues[sourceIndex] = { ...issue, data: { ...issue.data, status: newStatus } }
         }
         setIssues(updatedIssues)
 
