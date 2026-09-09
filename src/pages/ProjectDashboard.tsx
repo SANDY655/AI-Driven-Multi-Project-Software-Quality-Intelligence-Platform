@@ -8,6 +8,7 @@ import { EditMemberRoleModal } from '../components/projects/EditMemberRoleModal'
 import { EditProjectModal } from '../components/projects/EditProjectModal'
 import { CreateBugModal } from '../components/projects/CreateBugModal'
 import { CreateTaskModal } from '../components/projects/tasks/CreateTaskModal'
+import { ProjectQualityIntelligenceCard } from '../components/projects/ProjectQualityIntelligenceCard'
 import { Button } from '@/components/ui/button'
 import { Github, Users, Bug, AlertCircle, Trash2, CheckSquare, Lock, ShieldCheck } from 'lucide-react'
 
@@ -237,6 +238,9 @@ export function ProjectDashboard() {
                 {/* Left Column (Main content) */}
                 <div className="col-span-2 space-y-8">
                     
+                    {/* Quality Intelligence Executive Summary */}
+                    <ProjectQualityIntelligenceCard projectId={project.id} projectCode={project.project_code} />
+
                     {/* Activity/Quick Actions */}
                     <div>
                         <h2 className="text-lg font-medium mb-4">Quick Actions</h2>
