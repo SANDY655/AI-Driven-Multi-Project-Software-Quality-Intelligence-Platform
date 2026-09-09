@@ -40,12 +40,12 @@ export function TaskKanbanPage() {
             {/* Header Area */}
             <div className="px-8 pt-8 pb-4 flex-shrink-0">
                 {/* Breadcrumbs */}
-                <div className="flex items-center text-sm text-[#5E6C84] mb-2">
-                    <Link to="/projects" className="hover:underline">Projects</Link>
-                    <span className="mx-2">/</span>
-                    <Link to={`/projects/${id}`} className="hover:underline">{project.name}</Link>
-                    <span className="mx-2">/</span>
-                    <span className="text-[#172B4D]">Active Sprint</span>
+                <div className="flex items-center text-sm text-[#5E6C84] mb-2 min-w-0">
+                    <Link to="/projects" className="hover:underline flex-shrink-0">Projects</Link>
+                    <span className="mx-2 flex-shrink-0">/</span>
+                    <Link to={`/projects/${id}`} className="hover:underline max-w-[200px] sm:max-w-[320px] truncate inline-block align-bottom" title={project.name}>{project.name}</Link>
+                    <span className="mx-2 flex-shrink-0">/</span>
+                    <span className="text-[#172B4D] flex-shrink-0">Active Sprint</span>
                 </div>
 
                 <div className="flex justify-between items-end">

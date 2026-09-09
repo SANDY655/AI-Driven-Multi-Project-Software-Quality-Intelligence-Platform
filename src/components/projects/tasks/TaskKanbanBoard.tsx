@@ -175,19 +175,18 @@ export function TaskKanbanBoard({ projectId, refreshTrigger = 0, userRole, sprin
         const rawItems = issues.map(i => i.data)
         const filteredData = filterItems(rawItems, quickFilters, user?.id)
         const filteredIds = new Set(filteredData.map(d => (d as any).id))
-        return issues.filter(i => filteredIds.has(i.id))
+        return issues.filter(i => filteredIds.has(i.data.id))
     }
 
     const getIssuesByStatus = (status: string) => getFilteredIssues().filter(i => {
-        // Handle custom mapping if bugs use different statuses like 'open', 'resolved'
-        if (i.type === 'bug') {
-            const bugStatus = i.data.status
-            if (status === 'todo' && bugStatus === 'open') return true
-            if (status === 'in_progress' && bugStatus === 'in_progress') return true
-            if (status === 'in_review' && bugStatus === 'in_review') return true
-            if (status === 'done' && (bugStatus === 'resolved' || bugStatus === 'closed')) return true
-        }
-        return i.data.status === status
+        const itemStatus = (i.data.status || 'todo').toLowerCase().replace(/\s+/g, '_')
+        const colStatus = status.toLowerCase().replace(/\s+/g, '_')
+
+        if (colStatus === 'todo') return itemStatus === 'todo' || itemStatus === 'open'
+        if (colStatus === 'in_progress') return itemStatus === 'in_progress' || itemStatus === 'in progress'
+        if (colStatus === 'in_review') return itemStatus === 'in_review' || itemStatus === 'review'
+        if (colStatus === 'done') return itemStatus === 'done' || itemStatus === 'closed' || itemStatus === 'resolved'
+        return itemStatus === colStatus
     })
 
     if (loading) {

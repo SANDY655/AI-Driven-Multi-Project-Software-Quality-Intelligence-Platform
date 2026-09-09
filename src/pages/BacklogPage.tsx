@@ -334,27 +334,26 @@ export function BacklogPage() {
 
             {/* TOP BAR */}
             <div className="px-6 py-3 border-b border-[#DFE1E6] flex flex-col gap-3 flex-shrink-0 bg-white z-20">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="flex items-center text-xs text-[#5E6C84]">
-                            <Link to="/projects" className="hover:underline">Projects</Link>
-                            <span className="mx-2">/</span>
-                            <Link to={`/projects/${id}`} className="hover:underline">{project.name}</Link>
-                            <span className="mx-2">/</span>
-                            <span className="text-[#172B4D] font-bold">Backlog & Roadmap</span>
+                <div className="flex flex-wrap items-center justify-between gap-3 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex items-center text-xs text-[#5E6C84] min-w-0">
+                            <Link to="/projects" className="hover:underline flex-shrink-0">Projects</Link>
+                            <span className="mx-1.5 flex-shrink-0">/</span>
+                            <Link to={`/projects/${id}`} className="hover:underline max-w-[200px] sm:max-w-[320px] truncate inline-block align-bottom font-medium" title={project.name}>{project.name}</Link>
+                            <span className="mx-1.5 flex-shrink-0">/</span>
+                            <span className="text-[#172B4D] font-bold flex-shrink-0">Backlog & Roadmap</span>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        {/* Member Filter Chips */}
-                        <div className="flex items-center gap-1.5 mr-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                        {/* Member Filter Chips (Jira Avatar Filter Bar) */}
+                        <div className="flex items-center -space-x-1.5 hover:space-x-1 transition-all mr-2">
                             {members.map(m => (
                                 <button key={m.id} onClick={() => setAssigneeFilter(assigneeFilter === m.id ? null : m.id)}
-                                    className={`flex items-center gap-1.5 px-2 py-1 rounded transition-all text-xs ${assigneeFilter === m.id ? 'bg-[#DEEBFF] ring-2 ring-[#0052CC]' : 'hover:bg-[#EBECF0]'}`}
-                                    title={m.display_name}>
-                                    {m.avatar_url ? <img src={m.avatar_url} className="w-4 h-4 rounded-full" alt="" /> :
-                                        <div className="w-4 h-4 rounded-full bg-[#0052CC] text-white text-[9px] font-bold flex items-center justify-center">{m.display_name?.charAt(0)}</div>}
-                                    <span className="text-[#172B4D] font-medium">{m.display_name}</span>
+                                    className={`relative flex items-center justify-center w-7 h-7 rounded-full border-2 border-white transition-all focus:outline-none ${assigneeFilter === m.id ? 'ring-2 ring-[#0052CC] scale-110 z-10' : 'hover:scale-105'}`}
+                                    title={`Filter issues by: ${m.display_name}`}>
+                                    {m.avatar_url ? <img src={m.avatar_url} className="w-full h-full rounded-full object-cover" alt="" /> :
+                                        <div className="w-full h-full rounded-full bg-[#0052CC] text-white text-[10px] font-bold flex items-center justify-center uppercase">{m.display_name?.charAt(0) || '?'}</div>}
                                 </button>
                             ))}
                         </div>
