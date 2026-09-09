@@ -359,6 +359,21 @@ def github_webhook(payload: GitHubWebhookPayload):
             }).execute()
         except Exception as e:
             print("Link error:", e)
+
+        # 3b. Parse verified work logged directly from Git commit message (e.g. spent: 2h 30m)
+        time_match = re.search(r'(?i)spent:\s*(?:(\d+)d)?\s*(?:(\d+)h)?\s*(?:(\d+)m)?', message)
+        if time_match and (time_match.group(1) or time_match.group(2) or time_match.group(3)):
+            d_val = int(time_match.group(1)) if time_match.group(1) else 0
+            h_val = int(time_match.group(2)) if time_match.group(2) else 0
+            m_val = int(time_match.group(3)) if time_match.group(3) else 0
+            parsed_mins = (d_val * 8 * 60) + (h_val * 60) + m_val
+            if parsed_mins > 0:
+                try:
+                    curr_res = supabase.table(table_name).select("time_spent").eq("id", ticket_id).execute()
+                    curr_spent = (curr_res.data[0].get("time_spent") or 0) if curr_res.data else 0
+                    supabase.table(table_name).update({"time_spent": curr_spent + parsed_mins}).eq("id", ticket_id).execute()
+                except Exception as ex:
+                    print("Error updating verified time_spent from git commit:", ex)
             
         # 4. Auto-resolve and SLA
         sla_text = ""

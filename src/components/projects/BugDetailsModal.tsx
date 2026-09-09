@@ -23,6 +23,7 @@ import { CreateCommitModal } from './dev-tools/CreateCommitModal'
 import { SubTasksChecklist } from './SubTasksChecklist'
 import { LogWorkModal, formatMinutes } from './LogWorkModal'
 import { IssueLinkManager } from './IssueLinkManager'
+import { WorkIntegrityGuard } from './WorkIntegrityGuard'
 
 interface BugDetailsModalProps {
     bugId: string | null
@@ -664,6 +665,18 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
                                                     <span>Est: <strong>{formatMinutes(bug.original_estimate || 0)}</strong></span>
                                                 </div>
                                             </div>
+
+                                            {/* AI Work Integrity Guard */}
+                                            <div className="mt-3">
+                                                <WorkIntegrityGuard
+                                                    createdAt={bug.created_at}
+                                                    timeSpentMins={bug.time_spent || 0}
+                                                    originalEstimateMins={bug.original_estimate || 0}
+                                                    commitsCount={commits.length}
+                                                    branchesCount={branches.length}
+                                                    isResolved={['resolved', 'closed'].includes(bug.status?.toLowerCase())}
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1019,6 +1032,8 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
                     ticketDisplayId={bug.bug_display_id}
                     currentOriginalEstimate={bug.original_estimate || 0}
                     currentTimeSpent={bug.time_spent || 0}
+                    createdAt={bug.created_at}
+                    commitsCount={commits.length}
                     onWorkLogged={loadData}
                 />
             )}

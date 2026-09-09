@@ -23,6 +23,7 @@ import { CreateCommitModal } from '../dev-tools/CreateCommitModal'
 import { SubTasksChecklist } from '../SubTasksChecklist'
 import { LogWorkModal, formatMinutes } from '../LogWorkModal'
 import { IssueLinkManager } from '../IssueLinkManager'
+import { WorkIntegrityGuard } from '../WorkIntegrityGuard'
 
 interface TaskDetailsModalProps {
     taskId: string | null
@@ -796,6 +797,18 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                                                     <span>Est: <strong>{formatMinutes(task.original_estimate || 0)}</strong></span>
                                                 </div>
                                             </div>
+
+                                            {/* AI Work Integrity Guard */}
+                                            <div className="mt-3">
+                                                <WorkIntegrityGuard
+                                                    createdAt={task.created_at}
+                                                    timeSpentMins={task.time_spent || 0}
+                                                    originalEstimateMins={task.original_estimate || 0}
+                                                    commitsCount={commits.length}
+                                                    branchesCount={branches.length}
+                                                    isResolved={['done', 'resolved', 'closed'].includes(task.status?.toLowerCase())}
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1151,6 +1164,8 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                     ticketDisplayId={task.task_display_id}
                     currentOriginalEstimate={task.original_estimate || 0}
                     currentTimeSpent={task.time_spent || 0}
+                    createdAt={task.created_at}
+                    commitsCount={commits.length}
                     onWorkLogged={loadData}
                 />
             )}

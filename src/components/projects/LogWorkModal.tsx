@@ -15,6 +15,8 @@ interface LogWorkModalProps {
     ticketDisplayId: string
     currentOriginalEstimate?: number // in minutes
     currentTimeSpent?: number // in minutes
+    createdAt?: string
+    commitsCount?: number
     onWorkLogged: () => void
 }
 
@@ -65,6 +67,8 @@ export function LogWorkModal({
     ticketDisplayId,
     currentOriginalEstimate = 0,
     currentTimeSpent = 0,
+    createdAt,
+    commitsCount = 0,
     onWorkLogged
 }: LogWorkModalProps) {
     const { user } = useAuth()
@@ -83,6 +87,25 @@ export function LogWorkModal({
         if (newSpentMinutes === null || newSpentMinutes <= 0) {
             setError('Please enter a valid time spent (e.g. 2h 30m, 45m, 1d 4h)')
             return
+        }
+
+        // Anti-Misuse Check 1: Mandatory work description note for entries > 4 hours
+        if (newSpentMinutes > 240 && !worklogNote.trim()) {
+            setError('AI Work Audit: Entries over 4 hours require a work description note explaining the progress made.')
+            return
+        }
+
+        // Anti-Misuse Check 2: Total logged time cannot exceed calendar time elapsed since creation
+        if (createdAt) {
+            const createdTime = new Date(createdAt).getTime()
+            const nowTime = new Date().getTime()
+            const elapsedMins = Math.max(60, Math.floor((nowTime - createdTime) / (1000 * 60)))
+            const totalSpent = currentTimeSpent + newSpentMinutes
+
+            if (totalSpent > elapsedMins + 60) {
+                setError(`AI Work Audit Discrepancy: Total logged work (${formatMinutes(totalSpent)}) cannot exceed calendar time elapsed since creation (${formatMinutes(elapsedMins)}).`)
+                return
+            }
         }
 
         const newOriginalEst = parseTimeString(originalEstimateInput) || currentOriginalEstimate
@@ -152,6 +175,13 @@ export function LogWorkModal({
                         <div className="p-3 bg-[#FFEBE6] border border-[#DE350B] rounded text-[#DE350B] text-xs flex items-center gap-2">
                             <AlertCircle className="w-4 h-4 flex-shrink-0" />
                             {error}
+                        </div>
+                    )}
+
+                    {commitsCount === 0 && (
+                        <div className="p-2.5 bg-[#FFFAE6] border border-[#FF8B00] rounded text-[#172B4D] text-xs flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-[#FF8B00] flex-shrink-0" />
+                            <span><strong>AI Audit Notice:</strong> 0 Git commits are linked to this ticket. Ensure you include a detailed work note.</span>
                         </div>
                     )}
 
