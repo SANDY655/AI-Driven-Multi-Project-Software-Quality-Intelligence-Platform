@@ -135,30 +135,39 @@ export function TaskKanbanBoard({ projectId, refreshTrigger = 0, userRole, sprin
         if (!destination) return
         if (destination.droppableId === source.droppableId && destination.index === source.index) return
 
-        if (!userRole || userRole === 'viewer') {
+        if (userRole === 'viewer') {
             console.warn('Viewers cannot update task status')
             return
         }
 
-        const draggedIssue = issues.find(i => i.id === draggableId)
+        const draggedIssue = issues.find(i => i.id === draggableId || i.data.id === draggableId)
         if (!draggedIssue) return
 
         const newStatus = destination.droppableId
 
         // Optimistic update
         const updatedIssues = [...issues]
-        const sourceIndex = updatedIssues.findIndex(i => i.id === draggableId)
-        const issue = updatedIssues[sourceIndex]
-        if (issue.type === 'task') {
-            updatedIssues[sourceIndex] = { ...issue, data: { ...issue.data, status: newStatus } }
-        } else {
-            updatedIssues[sourceIndex] = { ...issue, data: { ...issue.data, status: newStatus } }
+        const sourceIndex = updatedIssues.findIndex(i => i.id === draggedIssue.id)
+        if (sourceIndex !== -1) {
+            if (draggedIssue.type === 'task') {
+                updatedIssues[sourceIndex] = {
+                    type: 'task',
+                    id: draggedIssue.id,
+                    data: { ...draggedIssue.data, status: newStatus }
+                }
+            } else {
+                updatedIssues[sourceIndex] = {
+                    type: 'bug',
+                    id: draggedIssue.id,
+                    data: { ...draggedIssue.data, status: newStatus }
+                }
+            }
+            setIssues(updatedIssues)
         }
-        setIssues(updatedIssues)
 
-        const isTask = draggableId.startsWith('task-')
+        const isTask = draggedIssue.type === 'task'
         const table = isTask ? 'tasks' : 'bugs'
-        const rawId = draggableId.replace(isTask ? 'task-' : 'bug-', '')
+        const rawId = draggedIssue.data.id
 
         const { error } = await supabase
             .from(table)

@@ -66,7 +66,7 @@ export function KanbanBoard({ projectId, refreshTrigger = 0, userRole, assigneeF
         if (!destination) return
         if (destination.droppableId === source.droppableId && destination.index === source.index) return
 
-        if (!userRole || userRole === 'viewer') {
+        if (userRole === 'viewer') {
             console.warn('Viewers cannot update bug status')
             return
         }
