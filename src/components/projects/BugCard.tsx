@@ -96,6 +96,14 @@ export function BugCard({ bug, index, onClick }: BugCardProps) {
                         {bug.title}
                     </div>
 
+                    {((bug as any).labels || []).some((l: any) => typeof l === 'string' && l.startsWith('link:is_blocked_by:')) && (
+                        <div className="mb-2">
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#FFFAE6] text-[#FF8B00] border border-[#FF8B00]">
+                                ⚠️ Blocked
+                            </span>
+                        </div>
+                    )}
+
                     {(bug.epic || (bug.story_points ?? 0) > 0) && (
                         <div className="flex flex-wrap gap-2 items-center mb-3">
                             {bug.epic && (

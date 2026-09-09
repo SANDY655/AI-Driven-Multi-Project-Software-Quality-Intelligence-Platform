@@ -34,6 +34,7 @@ import { useDebounce } from 'use-debounce'
 import { AIChatAssistant } from '../projects/AIChatAssistant'
 import { CreateBugModal } from '../projects/CreateBugModal'
 import { CreateTaskModal } from '../projects/tasks/CreateTaskModal'
+import { JiraCommandPalette } from '../projects/JiraCommandPalette'
 
 interface Project {
     id: string
@@ -68,6 +69,19 @@ export function AppLayout() {
     const [notifications, setNotifications] = useState<any[]>([])
     const [notifOpen, setNotifOpen] = useState(false)
     const [notifLoading, setNotifLoading] = useState(false)
+    const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
+
+    // Global Ctrl+K / Cmd+K keyboard shortcut listener
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                e.preventDefault()
+                setIsCommandPaletteOpen(prev => !prev)
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [])
 
     // Search State
     const [searchQuery, setSearchQuery] = useState('')
@@ -240,17 +254,20 @@ export function AppLayout() {
                 <div className="flex items-center gap-4">
                     {/* Search Bar */}
                     <div className="relative hidden lg:block w-[240px]">
-                        <div className={`flex items-center h-8 rounded border transition-all ${isSearchFocused ? 'border-[#4C9AFF] shadow-[0_0_0_2px_rgba(76,154,255,0.2)] bg-white' : 'border-[#DFE1E6] bg-[#FAFBFC] hover:bg-[#EBECF0]'}`}>
+                        <div 
+                            onClick={() => setIsCommandPaletteOpen(true)}
+                            className={`flex items-center h-8 rounded border transition-all cursor-pointer ${isSearchFocused ? 'border-[#4C9AFF] shadow-[0_0_0_2px_rgba(76,154,255,0.2)] bg-white' : 'border-[#DFE1E6] bg-[#FAFBFC] hover:bg-[#EBECF0]'}`}
+                        >
                             <Search className="w-4 h-4 ml-2 text-[#5E6C84]" />
                             <input
                                 type="text"
-                                placeholder="Search"
-                                className="w-full bg-transparent border-none outline-none px-2 text-sm text-[#172B4D] placeholder:text-[#5E6C84]"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                onFocus={() => setIsSearchFocused(true)}
-                                onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                                placeholder="Search (Ctrl + K)"
+                                readOnly
+                                className="w-full bg-transparent border-none outline-none px-2 text-sm text-[#172B4D] placeholder:text-[#5E6C84] cursor-pointer"
                             />
+                            <kbd className="mr-2 h-5 flex items-center rounded border border-[#DFE1E6] bg-white px-1.5 font-mono text-[10px] font-semibold text-[#6B778C]">
+                                ⌘K
+                            </kbd>
                         </div>
                         {/* Search Results Dropdown */}
                         {isSearchFocused && searchQuery.length > 0 && (
@@ -514,6 +531,12 @@ export function AppLayout() {
                     </div>
                 </div>
             )}
+            {/* Jira Global Command Palette (Ctrl + K) */}
+            <JiraCommandPalette
+                isOpen={isCommandPaletteOpen}
+                onClose={() => setIsCommandPaletteOpen(false)}
+                onOpenCreateModal={type => setCreateModalType(type)}
+            />
         </div>
     )
 }

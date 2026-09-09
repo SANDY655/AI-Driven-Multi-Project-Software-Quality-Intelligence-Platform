@@ -8,8 +8,9 @@ import { BugCard, type Bug } from '../components/projects/BugCard'
 import { TaskDetailsModal } from '../components/projects/tasks/TaskDetailsModal'
 import { BugDetailsModal } from '../components/projects/BugDetailsModal'
 import { ProjectAutomationModal } from '../components/projects/ProjectAutomationModal'
+import { JiraQuickFiltersBar, type QuickFilterState, filterItems } from '../components/projects/JiraQuickFiltersBar'
 import {
-    Sparkles, Plus, Target, ListOrdered, Zap, Calendar, Search, Download, Upload
+    Sparkles, Plus, Target, ListOrdered, Zap, Calendar, Download, Upload
 } from 'lucide-react'
 
 type Issue =
@@ -51,10 +52,15 @@ export function BacklogPage() {
     const [selectedBugId, setSelectedBugId] = useState<string | null>(null)
 
     // Quick Filters & Search
-    const [searchQuery, setSearchQuery] = useState('')
-    const [onlyMyIssues, setOnlyMyIssues] = useState(false)
-    const [highPriorityOnly, setHighPriorityOnly] = useState(false)
-    const [unassignedOnly, setUnassignedOnly] = useState(false)
+    const [quickFilters, setQuickFilters] = useState<QuickFilterState>({
+        searchQuery: '',
+        onlyMyIssues: false,
+        highPriorityOnly: false,
+        unassignedOnly: false,
+        bugsOnly: false,
+        tasksOnly: false,
+        recentlyUpdated: false
+    })
 
     // Automation Modal
     const [automationModalOpen, setAutomationModalOpen] = useState(false)
@@ -290,17 +296,8 @@ export function BacklogPage() {
         if (assigneeFilter && data.assigned_to !== assigneeFilter) return false
         if (epicFilter && data.epic?.id !== epicFilter) return false
 
-        // Quick Filters
-        if (onlyMyIssues && user?.id && data.assigned_to !== user.id) return false
-        if (highPriorityOnly && data.priority !== 'high' && data.priority !== 'urgent') return false
-        if (unassignedOnly && data.assigned_to) return false
-        if (searchQuery.trim()) {
-            const q = searchQuery.toLowerCase()
-            const key = (i.type === 'task' ? data.task_display_id : data.bug_display_id) || ''
-            const title = (data.title || '').toLowerCase()
-            if (!key.toLowerCase().includes(q) && !title.includes(q)) return false
-        }
-        return true
+        const passesQuickFilters = filterItems([data], quickFilters, user?.id).length > 0
+        return passesQuickFilters
     })
 
     const backlogIssues = filtered.filter(i => !(i.data as any).sprint_id)
@@ -406,62 +403,14 @@ export function BacklogPage() {
                 </div>
 
                 {/* JIRA QUICK FILTERS BAR */}
-                <div className="flex items-center gap-2 pt-1 border-t border-[#DFE1E6]/60">
-                    <div className="relative flex-1 max-w-xs">
-                        <Search className="w-3.5 h-3.5 text-[#5E6C84] absolute left-2.5 top-2" />
-                        <input
-                            type="text"
-                            placeholder="Filter by summary or key..."
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                            className="w-full bg-[#FAFBFC] border border-[#DFE1E6] rounded px-2.5 pl-8 py-1 text-xs text-[#172B4D] outline-none focus:border-[#0052CC] focus:bg-white transition-colors"
-                        />
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                        <button
-                            onClick={() => setOnlyMyIssues(!onlyMyIssues)}
-                            className={`px-2.5 py-1 rounded text-xs font-medium transition-all border ${
-                                onlyMyIssues ? 'bg-[#DEEBFF] text-[#0052CC] border-[#0052CC] font-bold' : 'bg-white text-[#42526E] border-[#DFE1E6] hover:bg-[#EBECF0]'
-                            }`}
-                        >
-                            Only My Issues
-                        </button>
-
-                        <button
-                            onClick={() => setHighPriorityOnly(!highPriorityOnly)}
-                            className={`px-2.5 py-1 rounded text-xs font-medium transition-all border ${
-                                highPriorityOnly ? 'bg-[#FFEBE6] text-[#DE350B] border-[#DE350B] font-bold' : 'bg-white text-[#42526E] border-[#DFE1E6] hover:bg-[#EBECF0]'
-                            }`}
-                        >
-                            High Priority
-                        </button>
-
-                        <button
-                            onClick={() => setUnassignedOnly(!unassignedOnly)}
-                            className={`px-2.5 py-1 rounded text-xs font-medium transition-all border ${
-                                unassignedOnly ? 'bg-[#EAE6FF] text-[#403294] border-[#403294] font-bold' : 'bg-white text-[#42526E] border-[#DFE1E6] hover:bg-[#EBECF0]'
-                            }`}
-                        >
-                            Unassigned
-                        </button>
-
-                        {(onlyMyIssues || highPriorityOnly || unassignedOnly || searchQuery || assigneeFilter || epicFilter) && (
-                            <button
-                                onClick={() => {
-                                    setOnlyMyIssues(false)
-                                    setHighPriorityOnly(false)
-                                    setUnassignedOnly(false)
-                                    setSearchQuery('')
-                                    setAssigneeFilter(null)
-                                    setEpicFilter(null)
-                                }}
-                                className="text-xs text-[#0052CC] hover:underline px-2 font-medium"
-                            >
-                                Clear filters
-                            </button>
-                        )}
-                    </div>
+                <div className="pt-2">
+                    <JiraQuickFiltersBar
+                        currentUserId={user?.id}
+                        filters={quickFilters}
+                        onFiltersChange={setQuickFilters}
+                        totalCount={issues.length}
+                        filteredCount={filtered.length}
+                    />
                 </div>
             </div>
 

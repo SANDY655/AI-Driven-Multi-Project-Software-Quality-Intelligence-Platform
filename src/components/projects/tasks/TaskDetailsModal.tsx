@@ -21,6 +21,8 @@ import { ConnectGithubModal } from '../dev-tools/ConnectGithubModal'
 import { CreateBranchModal } from '../dev-tools/CreateBranchModal'
 import { CreateCommitModal } from '../dev-tools/CreateCommitModal'
 import { SubTasksChecklist } from '../SubTasksChecklist'
+import { LogWorkModal, formatMinutes } from '../LogWorkModal'
+import { IssueLinkManager } from '../IssueLinkManager'
 
 interface TaskDetailsModalProps {
     taskId: string | null
@@ -546,6 +548,17 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                                     </div>
                                 </section>
 
+                                {/* Issue Linking Section */}
+                                <section className="mb-6 p-3 bg-[#FAFBFC] border border-[#DFE1E6] rounded">
+                                    <IssueLinkManager
+                                        ticketId={task.id}
+                                        ticketType="task"
+                                        ticketDisplayId={task.task_display_id}
+                                        currentLabels={task.labels || []}
+                                        onLinksUpdated={loadData}
+                                    />
+                                </section>
+
                                 <section className="flex-1 flex flex-col">
                                     <h3 className="text-[14px] font-semibold text-[#172B4D] mb-4">
                                         Activity
@@ -748,6 +761,40 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                                                         </span>
                                                     )
                                                 })()}
+                                            </div>
+                                        </div>
+
+                                        {/* Jira Time Tracking Section */}
+                                        <div className="pt-2 border-t border-[#DFE1E6]">
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <label className="text-[12px] font-semibold text-[#5E6C84] flex items-center gap-1">
+                                                    Time Tracking <Clock className="w-3 h-3 text-[#0747A6]" />
+                                                </label>
+                                                <button
+                                                    onClick={() => setLogWorkOpen(true)}
+                                                    className="text-[11px] font-bold text-[#0747A6] hover:underline"
+                                                >
+                                                    + Log Work
+                                                </button>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <div className="w-full bg-[#DFE1E6] h-2 rounded-full overflow-hidden flex">
+                                                    <div
+                                                        className="bg-[#00875A] h-full"
+                                                        style={{
+                                                            width: `${Math.min(
+                                                                100,
+                                                                (task.original_estimate || 0) > 0
+                                                                    ? ((task.time_spent || 0) / (task.original_estimate || 1)) * 100
+                                                                    : 0
+                                                            )}%`
+                                                        }}
+                                                    />
+                                                </div>
+                                                <div className="flex justify-between text-[11px] text-[#5E6C84]">
+                                                    <span>Logged: <strong>{formatMinutes(task.time_spent || 0)}</strong></span>
+                                                    <span>Est: <strong>{formatMinutes(task.original_estimate || 0)}</strong></span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1092,6 +1139,19 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                 <CreateCommitModal
                     issueDisplayId={task?.task_display_id || ''}
                     onClose={() => setCreateCommitOpen(false)}
+                />
+            )}
+
+            {logWorkOpen && (
+                <LogWorkModal
+                    isOpen={logWorkOpen}
+                    onClose={() => setLogWorkOpen(false)}
+                    ticketId={task.id}
+                    ticketType="task"
+                    ticketDisplayId={task.task_display_id}
+                    currentOriginalEstimate={task.original_estimate || 0}
+                    currentTimeSpent={task.time_spent || 0}
+                    onWorkLogged={loadData}
                 />
             )}
         </Dialog>

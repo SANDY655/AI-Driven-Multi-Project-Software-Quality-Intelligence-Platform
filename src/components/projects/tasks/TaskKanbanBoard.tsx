@@ -5,6 +5,8 @@ import { type Task as TaskType, TaskCard } from './TaskCard'
 import { type Bug as BugType, BugCard } from '../BugCard'
 import { TaskDetailsModal } from './TaskDetailsModal'
 import { BugDetailsModal } from '../BugDetailsModal'
+import { JiraQuickFiltersBar, type QuickFilterState, filterItems } from '../JiraQuickFiltersBar'
+import { useAuth } from '@/contexts/AuthContext'
 import { Loader2 } from 'lucide-react'
 
 interface ActiveSprintBoardProps {
@@ -19,13 +21,21 @@ type Issue =
     | { type: 'bug', id: string, data: BugType }
 
 export function TaskKanbanBoard({ projectId, refreshTrigger = 0, userRole, sprintId }: ActiveSprintBoardProps) {
+    const { user } = useAuth()
     const [issues, setIssues] = useState<Issue[]>([])
     const [columns, setColumns] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
     const [selectedBugId, setSelectedBugId] = useState<string | null>(null)
-    const [members, setMembers] = useState<any[]>([])
-    const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null)
+    const [quickFilters, setQuickFilters] = useState<QuickFilterState>({
+        searchQuery: '',
+        onlyMyIssues: false,
+        highPriorityOnly: false,
+        unassignedOnly: false,
+        bugsOnly: false,
+        tasksOnly: false,
+        recentlyUpdated: false
+    })
 
     useEffect(() => {
         async function init() {
@@ -51,25 +61,21 @@ export function TaskKanbanBoard({ projectId, refreshTrigger = 0, userRole, sprin
     }, [projectId, refreshTrigger, sprintId])
 
     async function loadColumns() {
-        const { data } = await supabase.from('project_statuses').select('*').eq('project_id', projectId).order('position', { ascending: true })
+        const { data } = await supabase
+            .from('project_statuses')
+            .select('*')
+            .eq('project_id', projectId)
+            .order('position', { ascending: true })
+
         if (data && data.length > 0) {
             setColumns(data)
         } else {
             setColumns([
-                { name: 'todo' },
-                { name: 'in_progress' },
-                { name: 'in_review' },
-                { name: 'done' },
+                { id: '1', name: 'todo' },
+                { id: '2', name: 'in_progress' },
+                { id: '3', name: 'in_review' },
+                { id: '4', name: 'done' }
             ])
-        }
-
-        const { data: membersData } = await supabase
-            .from('project_members')
-            .select(`profiles (id, display_name, avatar_url)`)
-            .eq('project_id', projectId)
-
-        if (membersData) {
-            setMembers(membersData.map((m: any) => m.profiles))
         }
     }
 
@@ -165,9 +171,14 @@ export function TaskKanbanBoard({ projectId, refreshTrigger = 0, userRole, sprin
         }
     }
 
-    const getIssuesByStatus = (status: string) => issues.filter(i => {
-        if (assigneeFilter && i.data.assigned_to !== assigneeFilter) return false
+    const getFilteredIssues = () => {
+        const rawItems = issues.map(i => i.data)
+        const filteredData = filterItems(rawItems, quickFilters, user?.id)
+        const filteredIds = new Set(filteredData.map(d => (d as any).id))
+        return issues.filter(i => filteredIds.has(i.id))
+    }
 
+    const getIssuesByStatus = (status: string) => getFilteredIssues().filter(i => {
         // Handle custom mapping if bugs use different statuses like 'open', 'resolved'
         if (i.type === 'bug') {
             const bugStatus = i.data.status
@@ -189,33 +200,14 @@ export function TaskKanbanBoard({ projectId, refreshTrigger = 0, userRole, sprin
 
     return (
         <div className="flex-1 flex flex-col min-h-0 bg-white">
-            <div className="px-8 py-4 border-b border-[#DFE1E6] flex items-center gap-4 flex-shrink-0">
-                <span className="text-[12px] font-semibold text-[#5E6C84] uppercase tracking-wider">Quick Filters</span>
-                <div className="flex items-center gap-1">
-                    <button
-                        onClick={() => setAssigneeFilter(null)}
-                        className={`px-3 py-1.5 rounded-[3px] text-sm font-medium transition-colors ${!assigneeFilter ? 'bg-[#DEEBFF] text-[#0052CC]' : 'text-[#42526E] hover:bg-[#EBECF0]'}`}
-                    >
-                        All
-                    </button>
-                    <div className="w-px h-4 bg-[#DFE1E6] mx-2"></div>
-                    {members.map(member => (
-                        <button
-                            key={member.id}
-                            onClick={() => setAssigneeFilter(assigneeFilter === member.id ? null : member.id)}
-                            className={`p-1 rounded-full transition-all ${assigneeFilter === member.id ? 'ring-2 ring-[#0052CC] ring-offset-1' : 'hover:opacity-80'}`}
-                            title={member.display_name}
-                        >
-                            {member.avatar_url ? (
-                                <img src={member.avatar_url} className="w-7 h-7 rounded-full" alt={member.display_name} />
-                            ) : (
-                                <div className="w-7 h-7 rounded-full bg-[#0052CC] text-white flex items-center justify-center text-xs font-bold">
-                                    {member.display_name?.charAt(0)}
-                                </div>
-                            )}
-                        </button>
-                    ))}
-                </div>
+            <div className="px-8 pt-4 pb-2 border-b border-[#DFE1E6] flex-shrink-0">
+                <JiraQuickFiltersBar
+                    currentUserId={user?.id}
+                    filters={quickFilters}
+                    onFiltersChange={setQuickFilters}
+                    totalCount={issues.length}
+                    filteredCount={getFilteredIssues().length}
+                />
             </div>
             
             <div className="flex-1 overflow-x-auto p-8 flex gap-4 items-start min-h-0">

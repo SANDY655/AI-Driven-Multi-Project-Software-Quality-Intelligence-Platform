@@ -21,6 +21,8 @@ import { ConnectGithubModal } from './dev-tools/ConnectGithubModal'
 import { CreateBranchModal } from './dev-tools/CreateBranchModal'
 import { CreateCommitModal } from './dev-tools/CreateCommitModal'
 import { SubTasksChecklist } from './SubTasksChecklist'
+import { LogWorkModal, formatMinutes } from './LogWorkModal'
+import { IssueLinkManager } from './IssueLinkManager'
 
 interface BugDetailsModalProps {
     bugId: string | null
@@ -393,6 +395,17 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
                                     </div>
                                 </section>
 
+                                 {/* Issue Linking Section */}
+                                 <section className="mb-6 p-3 bg-[#FAFBFC] border border-[#DFE1E6] rounded">
+                                     <IssueLinkManager
+                                         ticketId={bug.id}
+                                         ticketType="bug"
+                                         ticketDisplayId={bug.bug_display_id}
+                                         currentLabels={bug.labels || []}
+                                         onLinksUpdated={loadData}
+                                     />
+                                 </section>
+
                                 <section className="flex-1 flex flex-col">
                                     <h3 className="text-[14px] font-semibold text-[#172B4D] mb-4">
                                         Activity
@@ -616,6 +629,40 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
                                                         </span>
                                                     )
                                                 })()}
+                                            </div>
+                                        </div>
+
+                                        {/* Jira Time Tracking Section */}
+                                        <div className="pt-2 border-t border-[#DFE1E6]">
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <label className="text-[12px] font-semibold text-[#5E6C84] flex items-center gap-1">
+                                                    Time Tracking <Clock className="w-3 h-3 text-[#0747A6]" />
+                                                </label>
+                                                <button
+                                                    onClick={() => setLogWorkOpen(true)}
+                                                    className="text-[11px] font-bold text-[#0747A6] hover:underline"
+                                                >
+                                                    + Log Work
+                                                </button>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <div className="w-full bg-[#DFE1E6] h-2 rounded-full overflow-hidden flex">
+                                                    <div
+                                                        className="bg-[#00875A] h-full"
+                                                        style={{
+                                                            width: `${Math.min(
+                                                                100,
+                                                                (bug.original_estimate || 0) > 0
+                                                                    ? ((bug.time_spent || 0) / (bug.original_estimate || 1)) * 100
+                                                                    : 0
+                                                            )}%`
+                                                        }}
+                                                    />
+                                                </div>
+                                                <div className="flex justify-between text-[11px] text-[#5E6C84]">
+                                                    <span>Logged: <strong>{formatMinutes(bug.time_spent || 0)}</strong></span>
+                                                    <span>Est: <strong>{formatMinutes(bug.original_estimate || 0)}</strong></span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -960,6 +1007,19 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
                 <CreateCommitModal
                     issueDisplayId={bug?.bug_display_id || ''}
                     onClose={() => setCreateCommitOpen(false)}
+                />
+            )}
+
+            {logWorkOpen && (
+                <LogWorkModal
+                    isOpen={logWorkOpen}
+                    onClose={() => setLogWorkOpen(false)}
+                    ticketId={bug.id}
+                    ticketType="bug"
+                    ticketDisplayId={bug.bug_display_id}
+                    currentOriginalEstimate={bug.original_estimate || 0}
+                    currentTimeSpent={bug.time_spent || 0}
+                    onWorkLogged={loadData}
                 />
             )}
         </Dialog>
