@@ -34,7 +34,6 @@ export function ProfilePage() {
     // Editable profile fields
     const [displayName, setDisplayName] = useState('')
     const [githubUsername, setGithubUsername] = useState('')
-    const [roleTitle, setRoleTitle] = useState('Senior Software Engineer')
     const [preferredIDE, setPreferredIDE] = useState('vscode')
     const [saving, setSaving] = useState(false)
     const [saveMessage, setSaveMessage] = useState('')
@@ -201,7 +200,7 @@ export function ProfilePage() {
 
                             <p className="text-xs font-semibold text-[#5E6C84] flex items-center gap-2">
                                 <Briefcase className="w-3.5 h-3.5" />
-                                {roleTitle}
+                                {profile?.role_title || 'Software Engineer'}
                                 <span>•</span>
                                 <Building className="w-3.5 h-3.5" />
                                 Engineering Dept

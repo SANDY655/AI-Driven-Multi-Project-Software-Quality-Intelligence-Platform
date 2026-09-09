@@ -64,7 +64,23 @@ def fetch_similar_bugs(db_client: Client, embedding: list[float], threshold: flo
         }
     ).execute()
     
-    return response.data
+    res = response.data or []
+    if not res and threshold > -0.5:
+        try:
+            fallback_res = db_client.rpc(
+                "match_bugs",
+                {
+                    "query_embedding": embedding,
+                    "match_threshold": -1.0,
+                    "match_count": count,
+                    "filter_project_id": project_id
+                }
+            ).execute()
+            res = fallback_res.data or []
+        except Exception:
+            pass
+            
+    return res
 
 def fetch_project_details(db_client: Client, project_id: str | None) -> dict | None:
     if not db_client or not project_id:
@@ -257,8 +273,8 @@ def github_webhook(payload: GitHubWebhookPayload):
 
     for commit in payload.commits:
         message = commit.get("message", "")
-        # Look for bug ID (PROJ-123) or task ID (PROJ-T123)
-        match = re.search(r'([A-Z]+-(?:T)?\d+)', message.upper())
+        # Look for bug ID (PROJ-123, SQIP814-1) or task ID (PROJ-T123, SQIP814-T1)
+        match = re.search(r'([A-Z0-9]+-(?:T)?\d+)', message.upper())
         if not match:
             continue
             
@@ -323,11 +339,14 @@ def github_webhook(payload: GitHubWebhookPayload):
             }).execute()
             inserted_commit_id = commit_res.data[0]["id"]
         except Exception as e:
-            print("Commit might already exist or error:", e)
+            print(f"Commit insert error: {e}")
+            import traceback
+            traceback.print_exc()
             existing = supabase.table("commits").select("id").eq("sha", commit_sha).execute()
             if existing.data:
                 inserted_commit_id = existing.data[0]["id"]
             else:
+                print("Commit could not be found or inserted, skipping")
                 continue
             
         # 3. Link commit to bug/task

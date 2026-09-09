@@ -63,7 +63,7 @@ export function CreateTaskModal({ projectId, projectCode, onSuccess }: CreateTas
     }, [open, projectId])
 
     const form = useForm<z.infer<typeof formSchema>>({
-        resolver: zodResolver(formSchema),
+        resolver: zodResolver(formSchema) as any,
         defaultValues: {
             title: '',
             description: '',

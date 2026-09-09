@@ -398,7 +398,19 @@ def fetch_similar_tasks(db_client: Client, query_embedding: list[float], thresho
                 "filter_project_id": project_id
             }
         ).execute()
-        return response.data
+        res = response.data or []
+        if not res and threshold > -0.5:
+            fallback = db_client.rpc(
+                "match_tasks",
+                {
+                    "query_embedding": query_embedding,
+                    "match_threshold": -1.0,
+                    "match_count": count,
+                    "filter_project_id": project_id
+                }
+            ).execute()
+            res = fallback.data or []
+        return res
     except Exception as e:
         print(f"Error fetching similar tasks: {e}")
         return []

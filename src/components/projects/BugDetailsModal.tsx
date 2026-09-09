@@ -248,11 +248,16 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
         const isResolving = (field === 'status' && (value === 'resolved' || value === 'closed'))
         const isUnresolving = (field === 'status' && (value !== 'resolved' && value !== 'closed') && (bug.status === 'resolved' || bug.status === 'closed'))
         
-        let extraUpdate = {}
+        let extraUpdate: any = {}
         if (isResolving && !bug.resolved_at) {
             extraUpdate = { resolved_at: new Date().toISOString() }
         } else if (isUnresolving) {
             extraUpdate = { resolved_at: null }
+        }
+
+        // Automation Rule 1: Auto-assign on "In Progress" if currently unassigned
+        if (field === 'status' && value === 'in_progress' && user?.id && !bug.assigned_to) {
+            extraUpdate.assigned_to = user.id
         }
 
         const { error } = await supabase
@@ -313,32 +318,67 @@ export function BugDetailsModal({ bugId, projectId, userRole: initialUserRole, o
                     </div>
                 ) : (
                     <>
-                        <div className="px-6 py-4 flex justify-between items-start flex-shrink-0 border-b border-[#DFE1E6]">
-                            <div className="flex flex-col gap-1">
-                                <div className="text-[12px] font-medium text-[#5E6C84]">
-                                    {bug.bug_display_id}
+                        <div className="px-6 py-4 flex flex-col gap-3 flex-shrink-0 border-b border-[#DFE1E6] bg-[#FAFBFC]">
+                            <div className="flex justify-between items-start">
+                                <div className="flex flex-col gap-1">
+                                    <div className="text-[12px] font-medium text-[#5E6C84] flex items-center gap-2">
+                                        <span>{bug.bug_display_id}</span>
+                                        <span className="text-[#DFE1E6]">•</span>
+                                        <span className="capitalize text-[#42526E]">{bug.priority} Priority</span>
+                                        <span className="text-[#DFE1E6]">•</span>
+                                        <span className="capitalize text-[#DE350B] font-semibold">{bug.severity} Severity</span>
+                                    </div>
+                                    <DialogTitle className="text-2xl font-semibold text-[#172B4D]">
+                                        {bug.title}
+                                    </DialogTitle>
                                 </div>
-                                <DialogTitle className="text-2xl font-medium text-[#172B4D]">
-                                    {bug.title}
-                                </DialogTitle>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                {canDelete && (
+                                <div className="flex items-center gap-2">
+                                    {canDelete && (
+                                        <button
+                                            onClick={handleDeleteBug}
+                                            className="p-2 text-[#5E6C84] hover:text-[#DE350B] hover:bg-[#FFEBE6] rounded-[3px] transition-colors"
+                                            title="Delete Bug"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    )}
                                     <button
-                                        onClick={handleDeleteBug}
-                                        className="p-2 text-[#5E6C84] hover:text-[#DE350B] hover:bg-[#FFEBE6] rounded-[3px] transition-colors"
-                                        title="Delete Bug"
+                                        onClick={onClose}
+                                        className="p-2 text-[#5E6C84] hover:text-[#172B4D] hover:bg-[#EBECF0] rounded-[3px] transition-colors"
+                                        title="Close"
                                     >
-                                        <Trash2 className="h-4 w-4" />
+                                        <X className="h-5 w-5" />
                                     </button>
-                                )}
-                                <button
-                                    onClick={onClose}
-                                    className="p-2 text-[#5E6C84] hover:text-[#172B4D] hover:bg-[#EBECF0] rounded-[3px] transition-colors"
-                                    title="Close"
-                                >
-                                    <X className="h-5 w-5" />
-                                </button>
+                                </div>
+                            </div>
+
+                            {/* Jira Workflow Stepper & Quick Action Transition Buttons */}
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                                <span className="text-[11px] font-bold text-[#5E6C84] uppercase tracking-wider mr-1">Workflow State:</span>
+                                <div className="flex items-center gap-1 bg-white p-1 rounded border border-[#DFE1E6]">
+                                    {[
+                                        { id: 'open', label: 'Open' },
+                                        { id: 'in_progress', label: 'In Progress' },
+                                        { id: 'resolved', label: 'Resolved' },
+                                        { id: 'closed', label: 'Closed' }
+                                    ].map((step) => {
+                                        const isActive = bug.status === step.id
+                                        return (
+                                            <button
+                                                key={step.id}
+                                                onClick={() => updateField('status', step.id)}
+                                                className={`px-3 py-1 text-xs font-medium rounded transition-all flex items-center gap-1.5 ${
+                                                    isActive
+                                                        ? 'bg-[#0052CC] text-white shadow-xs font-bold'
+                                                        : 'text-[#42526E] hover:bg-[#EBECF0] hover:text-[#172B4D]'
+                                                }`}
+                                            >
+                                                <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white' : 'bg-[#A5ADBA]'}`}></span>
+                                                {step.label}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
                             </div>
                         </div>
 

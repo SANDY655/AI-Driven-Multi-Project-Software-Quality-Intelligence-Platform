@@ -1,11 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 import { DragDropContext, Droppable, type DropResult } from '@hello-pangea/dnd'
 import { TaskCard, type Task } from '../components/projects/tasks/TaskCard'
 import { BugCard, type Bug } from '../components/projects/BugCard'
+import { TaskDetailsModal } from '../components/projects/tasks/TaskDetailsModal'
+import { BugDetailsModal } from '../components/projects/BugDetailsModal'
+import { ProjectAutomationModal } from '../components/projects/ProjectAutomationModal'
 import {
-    Sparkles, Plus, Target, ListOrdered, Zap, Calendar
+    Sparkles, Plus, Target, ListOrdered, Zap, Calendar, Search, Download, Upload
 } from 'lucide-react'
 
 type Issue =
@@ -30,6 +34,7 @@ function getValidDateStr(dateValue: any, fallbackOffsetDays = 0): string {
 
 export function BacklogPage() {
     const { id } = useParams<{ id: string }>()
+    const { user } = useAuth()
     const [project, setProject] = useState<any>(null)
     const [issues, setIssues] = useState<Issue[]>([])
     const [sprints, setSprints] = useState<any[]>([])
@@ -40,6 +45,22 @@ export function BacklogPage() {
     const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null)
     const [epicFilter, setEpicFilter] = useState<string | null>(null)
     const [sprintViewFilter, setSprintViewFilter] = useState<string>('all')
+
+    // Selected issue detail modal states
+    const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+    const [selectedBugId, setSelectedBugId] = useState<string | null>(null)
+
+    // Quick Filters & Search
+    const [searchQuery, setSearchQuery] = useState('')
+    const [onlyMyIssues, setOnlyMyIssues] = useState(false)
+    const [highPriorityOnly, setHighPriorityOnly] = useState(false)
+    const [unassignedOnly, setUnassignedOnly] = useState(false)
+
+    // Automation Modal
+    const [automationModalOpen, setAutomationModalOpen] = useState(false)
+
+    // File Input Ref for CSV Import
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     // Epic creation
     const [creatingEpic, setCreatingEpic] = useState(false)
@@ -176,11 +197,109 @@ export function BacklogPage() {
         } finally { setIsGeneratingEpics(false) }
     }
 
+    function exportToCSV() {
+        if (!issues.length) return alert('No issues to export.')
+        const headers = ['Type', 'ID', 'Display Key', 'Title', 'Priority', 'Status', 'Story Points', 'Estimate (m)', 'Logged (m)']
+        const rows = issues.map(i => {
+            const data: any = i.data
+            const displayId = i.type === 'task' ? data.task_display_id : data.bug_display_id
+            return [
+                i.type.toUpperCase(),
+                data.id,
+                displayId || '',
+                `"${(data.title || '').replace(/"/g, '""')}"`,
+                data.priority || 'medium',
+                data.status || 'todo',
+                data.story_points || 0,
+                data.original_estimate || 0,
+                data.time_spent || 0
+            ].join(',')
+        })
+        const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows].join('\n')
+        const encodedUri = encodeURI(csvContent)
+        const link = document.createElement('a')
+        link.setAttribute('href', encodedUri)
+        link.setAttribute('download', `${project?.project_code || 'Jira'}_backlog_export.csv`)
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+    }
+
+    async function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0]
+        if (!file || !id) return
+        const reader = new FileReader()
+        reader.onload = async (evt) => {
+            const text = evt.target?.result as string
+            if (!text) return
+            const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+            if (lines.length <= 1) return alert('CSV file is empty or missing data.')
+            
+            const newTasks = []
+            for (let i = 1; i < lines.length; i++) {
+                const cols = lines[i].split(',')
+                if (cols.length >= 4) {
+                    const title = cols[3]?.replace(/^"|"$/g, '') || cols[2] || `Imported Issue ${i}`
+                    newTasks.push({
+                        project_id: id,
+                        title: title,
+                        description: 'Imported from Jira CSV',
+                        priority: cols[4] ? cols[4].toLowerCase() : 'medium',
+                        status: 'todo',
+                        story_points: parseInt(cols[6]) || 0
+                    })
+                }
+            }
+            if (newTasks.length > 0) {
+                const { error } = await supabase.from('tasks').insert(newTasks)
+                if (!error) {
+                    alert(`Successfully imported ${newTasks.length} issues into Backlog!`)
+                    loadData()
+                } else {
+                    alert(`Failed to import issues: ${error.message}`)
+                }
+            }
+        }
+        reader.readAsText(file)
+        e.target.value = ''
+    }
+
+    function IssueRow({ item, index }: { item: Issue, index: number }) {
+        if (item.type === 'task') {
+            return (
+                <TaskCard
+                    task={item.data}
+                    index={index}
+                    onClick={() => setSelectedTaskId(item.data.id)}
+                />
+            )
+        }
+        return (
+            <BugCard
+                bug={item.data}
+                index={index}
+                onClick={() => setSelectedBugId(item.data.id)}
+            />
+        )
+    }
+
     if (!project) return null
 
     const filtered = issues.filter(i => {
-        if (assigneeFilter && i.data.assigned_to !== assigneeFilter) return false
-        if (epicFilter && (i.data as any).epic?.id !== epicFilter) return false
+        const data: any = i.data
+        if (assigneeFilter && data.assigned_to !== assigneeFilter) return false
+        if (epicFilter && data.epic?.id !== epicFilter) return false
+
+        // Quick Filters
+        if (onlyMyIssues && user?.id && data.assigned_to !== user.id) return false
+        if (highPriorityOnly && data.priority !== 'high' && data.priority !== 'urgent') return false
+        if (unassignedOnly && data.assigned_to) return false
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase()
+            const key = (i.type === 'task' ? data.task_display_id : data.bug_display_id) || ''
+            const title = (data.title || '').toLowerCase()
+            if (!key.toLowerCase().includes(q) && !title.includes(q)) return false
+        }
         return true
     })
 
@@ -217,35 +336,132 @@ export function BacklogPage() {
         <div className="h-[calc(100vh-56px)] flex flex-col bg-white overflow-hidden">
 
             {/* TOP BAR */}
-            <div className="px-6 py-3 border-b border-[#DFE1E6] flex items-center justify-between flex-shrink-0 bg-white z-20">
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center text-xs text-[#5E6C84]">
-                        <Link to="/projects" className="hover:underline">Projects</Link>
-                        <span className="mx-2">/</span>
-                        <Link to={`/projects/${id}`} className="hover:underline">{project.name}</Link>
-                        <span className="mx-2">/</span>
-                        <span className="text-[#172B4D] font-bold">Backlog & Roadmap</span>
+            <div className="px-6 py-3 border-b border-[#DFE1E6] flex flex-col gap-3 flex-shrink-0 bg-white z-20">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center text-xs text-[#5E6C84]">
+                            <Link to="/projects" className="hover:underline">Projects</Link>
+                            <span className="mx-2">/</span>
+                            <Link to={`/projects/${id}`} className="hover:underline">{project.name}</Link>
+                            <span className="mx-2">/</span>
+                            <span className="text-[#172B4D] font-bold">Backlog & Roadmap</span>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        {/* Member Filter Chips */}
+                        <div className="flex items-center gap-1.5 mr-2">
+                            {members.map(m => (
+                                <button key={m.id} onClick={() => setAssigneeFilter(assigneeFilter === m.id ? null : m.id)}
+                                    className={`flex items-center gap-1.5 px-2 py-1 rounded transition-all text-xs ${assigneeFilter === m.id ? 'bg-[#DEEBFF] ring-2 ring-[#0052CC]' : 'hover:bg-[#EBECF0]'}`}
+                                    title={m.display_name}>
+                                    {m.avatar_url ? <img src={m.avatar_url} className="w-4 h-4 rounded-full" alt="" /> :
+                                        <div className="w-4 h-4 rounded-full bg-[#0052CC] text-white text-[9px] font-bold flex items-center justify-center">{m.display_name?.charAt(0)}</div>}
+                                    <span className="text-[#172B4D] font-medium">{m.display_name}</span>
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Jira Automation Engine Trigger */}
+                        <button
+                            onClick={() => setAutomationModalOpen(true)}
+                            className="px-2.5 py-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-bold rounded transition-all flex items-center gap-1.5 shadow-xs"
+                            title="Configure Jira Automation Rules"
+                        >
+                            <Zap className="w-3.5 h-3.5" />
+                            <span>Automation Rules</span>
+                        </button>
+
+                        {/* CSV Import/Export */}
+                        <button
+                            onClick={exportToCSV}
+                            className="px-2 py-1 bg-[#F4F5F7] hover:bg-[#EBECF0] text-[#172B4D] border border-[#DFE1E6] text-xs font-semibold rounded transition-colors flex items-center gap-1"
+                            title="Export Backlog to CSV"
+                        >
+                            <Download className="w-3.5 h-3.5 text-[#5E6C84]" />
+                            <span>Export CSV</span>
+                        </button>
+
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="px-2 py-1 bg-[#F4F5F7] hover:bg-[#EBECF0] text-[#172B4D] border border-[#DFE1E6] text-xs font-semibold rounded transition-colors flex items-center gap-1"
+                            title="Import Issues from CSV"
+                        >
+                            <Upload className="w-3.5 h-3.5 text-[#5E6C84]" />
+                            <span>Import CSV</span>
+                        </button>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".csv"
+                            onChange={handleImportCSV}
+                            className="hidden"
+                        />
+
+                        <button onClick={createSprint} className="px-3 py-1 bg-[#0052CC] hover:bg-[#0047B3] text-white text-xs font-bold rounded transition-colors flex items-center gap-1 shadow-xs ml-1">
+                            <Plus className="w-3.5 h-3.5" />
+                            New Sprint
+                        </button>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    {/* Member Filter Chips */}
-                    <div className="flex items-center gap-1.5">
-                        {members.map(m => (
-                            <button key={m.id} onClick={() => setAssigneeFilter(assigneeFilter === m.id ? null : m.id)}
-                                className={`flex items-center gap-1.5 px-2 py-1 rounded transition-all text-xs ${assigneeFilter === m.id ? 'bg-[#DEEBFF] ring-2 ring-[#0052CC]' : 'hover:bg-[#EBECF0]'}`}
-                                title={m.display_name}>
-                                {m.avatar_url ? <img src={m.avatar_url} className="w-4 h-4 rounded-full" alt="" /> :
-                                    <div className="w-4 h-4 rounded-full bg-[#0052CC] text-white text-[9px] font-bold flex items-center justify-center">{m.display_name?.charAt(0)}</div>}
-                                <span className="text-[#172B4D] font-medium">{m.display_name}</span>
-                            </button>
-                        ))}
+                {/* JIRA QUICK FILTERS BAR */}
+                <div className="flex items-center gap-2 pt-1 border-t border-[#DFE1E6]/60">
+                    <div className="relative flex-1 max-w-xs">
+                        <Search className="w-3.5 h-3.5 text-[#5E6C84] absolute left-2.5 top-2" />
+                        <input
+                            type="text"
+                            placeholder="Filter by summary or key..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="w-full bg-[#FAFBFC] border border-[#DFE1E6] rounded px-2.5 pl-8 py-1 text-xs text-[#172B4D] outline-none focus:border-[#0052CC] focus:bg-white transition-colors"
+                        />
                     </div>
 
-                    <button onClick={createSprint} className="px-3 py-1.5 bg-[#0052CC] hover:bg-[#0047B3] text-white text-xs font-bold rounded transition-colors flex items-center gap-1 shadow-xs">
-                        <Plus className="w-3.5 h-3.5" />
-                        New Sprint
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                        <button
+                            onClick={() => setOnlyMyIssues(!onlyMyIssues)}
+                            className={`px-2.5 py-1 rounded text-xs font-medium transition-all border ${
+                                onlyMyIssues ? 'bg-[#DEEBFF] text-[#0052CC] border-[#0052CC] font-bold' : 'bg-white text-[#42526E] border-[#DFE1E6] hover:bg-[#EBECF0]'
+                            }`}
+                        >
+                            Only My Issues
+                        </button>
+
+                        <button
+                            onClick={() => setHighPriorityOnly(!highPriorityOnly)}
+                            className={`px-2.5 py-1 rounded text-xs font-medium transition-all border ${
+                                highPriorityOnly ? 'bg-[#FFEBE6] text-[#DE350B] border-[#DE350B] font-bold' : 'bg-white text-[#42526E] border-[#DFE1E6] hover:bg-[#EBECF0]'
+                            }`}
+                        >
+                            High Priority
+                        </button>
+
+                        <button
+                            onClick={() => setUnassignedOnly(!unassignedOnly)}
+                            className={`px-2.5 py-1 rounded text-xs font-medium transition-all border ${
+                                unassignedOnly ? 'bg-[#EAE6FF] text-[#403294] border-[#403294] font-bold' : 'bg-white text-[#42526E] border-[#DFE1E6] hover:bg-[#EBECF0]'
+                            }`}
+                        >
+                            Unassigned
+                        </button>
+
+                        {(onlyMyIssues || highPriorityOnly || unassignedOnly || searchQuery || assigneeFilter || epicFilter) && (
+                            <button
+                                onClick={() => {
+                                    setOnlyMyIssues(false)
+                                    setHighPriorityOnly(false)
+                                    setUnassignedOnly(false)
+                                    setSearchQuery('')
+                                    setAssigneeFilter(null)
+                                    setEpicFilter(null)
+                                }}
+                                className="text-xs text-[#0052CC] hover:underline px-2 font-medium"
+                            >
+                                Clear filters
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -567,6 +783,32 @@ export function BacklogPage() {
                     </div>
                 </div>
             </div>
+
+            {automationModalOpen && id && (
+                <ProjectAutomationModal
+                    isOpen={automationModalOpen}
+                    onClose={() => setAutomationModalOpen(false)}
+                    projectId={id}
+                />
+            )}
+
+            {selectedTaskId && id && (
+                <TaskDetailsModal
+                    taskId={selectedTaskId}
+                    projectId={id}
+                    onClose={() => setSelectedTaskId(null)}
+                    onUpdate={loadData}
+                />
+            )}
+
+            {selectedBugId && id && (
+                <BugDetailsModal
+                    bugId={selectedBugId}
+                    projectId={id}
+                    onClose={() => setSelectedBugId(null)}
+                    onUpdate={loadData}
+                />
+            )}
         </div>
     )
 }

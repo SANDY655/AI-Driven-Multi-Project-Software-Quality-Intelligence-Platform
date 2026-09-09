@@ -57,7 +57,7 @@ export function CreateBugModal({ projectId, projectCode, onSuccess }: CreateBugM
     const { user } = useAuth()
 
     const form = useForm<z.infer<typeof formSchema>>({
-        resolver: zodResolver(formSchema),
+        resolver: zodResolver(formSchema) as any,
         defaultValues: {
             title: '',
             description: '',

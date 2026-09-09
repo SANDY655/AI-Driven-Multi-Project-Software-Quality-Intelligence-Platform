@@ -317,11 +317,16 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
         const isResolving = (field === 'status' && (value === 'done' || value === 'resolved'))
         const isUnresolving = (field === 'status' && (value !== 'done' && value !== 'resolved') && task.status === 'done')
         
-        let extraUpdate = {}
+        let extraUpdate: any = {}
         if (isResolving && !task.resolved_at) {
             extraUpdate = { resolved_at: new Date().toISOString() }
         } else if (isUnresolving) {
             extraUpdate = { resolved_at: null }
+        }
+
+        // Automation Rule 1: Auto-assign on "In Progress" if currently unassigned
+        if (field === 'status' && value === 'in_progress' && user?.id && !task.assigned_to) {
+            extraUpdate.assigned_to = user.id
         }
 
         const { error } = await supabase
@@ -377,32 +382,65 @@ export function TaskDetailsModal({ taskId, projectId, userRole: initialUserRole,
                     </div>
                 ) : (
                     <>
-                        <div className="px-6 py-4 flex justify-between items-start flex-shrink-0 border-b border-[#DFE1E6]">
-                            <div className="flex flex-col gap-1">
-                                <div className="text-[12px] font-medium text-[#5E6C84]">
-                                    {task.task_display_id}
+                        <div className="px-6 py-4 flex flex-col gap-3 flex-shrink-0 border-b border-[#DFE1E6] bg-[#FAFBFC]">
+                            <div className="flex justify-between items-start">
+                                <div className="flex flex-col gap-1">
+                                    <div className="text-[12px] font-medium text-[#5E6C84] flex items-center gap-2">
+                                        <span>{task.task_display_id}</span>
+                                        <span className="text-[#DFE1E6]">•</span>
+                                        <span className="capitalize text-[#42526E]">{task.priority} Priority</span>
+                                    </div>
+                                    <DialogTitle className="text-2xl font-semibold text-[#172B4D]">
+                                        {task.title}
+                                    </DialogTitle>
                                 </div>
-                                <DialogTitle className="text-2xl font-medium text-[#172B4D]">
-                                    {task.title}
-                                </DialogTitle>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                {canDelete && (
+                                <div className="flex items-center gap-2">
+                                    {canDelete && (
+                                        <button
+                                            onClick={handleDeleteTask}
+                                            className="p-2 text-[#5E6C84] hover:text-[#DE350B] hover:bg-[#FFEBE6] rounded-[3px] transition-colors"
+                                            title="Delete Task"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    )}
                                     <button
-                                        onClick={handleDeleteTask}
-                                        className="p-2 text-[#5E6C84] hover:text-[#DE350B] hover:bg-[#FFEBE6] rounded-[3px] transition-colors"
-                                        title="Delete Task"
+                                        onClick={onClose}
+                                        className="p-2 text-[#5E6C84] hover:text-[#172B4D] hover:bg-[#EBECF0] rounded-[3px] transition-colors"
+                                        title="Close"
                                     >
-                                        <Trash2 className="h-4 w-4" />
+                                        <X className="h-5 w-5" />
                                     </button>
-                                )}
-                                <button
-                                    onClick={onClose}
-                                    className="p-2 text-[#5E6C84] hover:text-[#172B4D] hover:bg-[#EBECF0] rounded-[3px] transition-colors"
-                                    title="Close"
-                                >
-                                    <X className="h-5 w-5" />
-                                </button>
+                                </div>
+                            </div>
+
+                            {/* Jira Workflow Stepper & Quick Action Transition Buttons */}
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                                <span className="text-[11px] font-bold text-[#5E6C84] uppercase tracking-wider mr-1">Workflow State:</span>
+                                <div className="flex items-center gap-1 bg-white p-1 rounded border border-[#DFE1E6]">
+                                    {[
+                                        { id: 'todo', label: 'To Do' },
+                                        { id: 'in_progress', label: 'In Progress' },
+                                        { id: 'in_review', label: 'In Review' },
+                                        { id: 'done', label: 'Done' }
+                                    ].map((step) => {
+                                        const isActive = task.status === step.id
+                                        return (
+                                            <button
+                                                key={step.id}
+                                                onClick={() => updateField('status', step.id)}
+                                                className={`px-3 py-1 text-xs font-medium rounded transition-all flex items-center gap-1.5 ${
+                                                    isActive
+                                                        ? 'bg-[#0052CC] text-white shadow-xs font-bold'
+                                                        : 'text-[#42526E] hover:bg-[#EBECF0] hover:text-[#172B4D]'
+                                                }`}
+                                            >
+                                                <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white' : 'bg-[#A5ADBA]'}`}></span>
+                                                {step.label}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
                             </div>
                         </div>
 
