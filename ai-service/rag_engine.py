@@ -429,7 +429,16 @@ def format_task_context(tasks: list) -> str:
     return context
 
 def generate_chat_response(query: str, similar_bugs: list, similar_tasks: list, project_details: dict | None = None) -> str:
-    """Uses local Llama model to answer a query based on a context of similar bugs and tasks."""
+    """Uses local LLM model to answer a query based on a context of similar bugs and tasks."""
+    clean_query = query.strip().lower().rstrip('!?.')
+    greetings = {'hi', 'hello', 'hey', 'hi there', 'hello there', 'greetings', 'good morning', 'good afternoon', 'good evening', 'help'}
+    
+    if clean_query in greetings:
+        proj_name = project_details.get('name') if project_details else None
+        if proj_name:
+            return f"Hello! How can I assist you with project '{proj_name}' today? You can ask me about bugs, tasks, team workloads, or sprint progress."
+        return "Hello! How can I help you with your project's bugs, tasks, or sprints today?"
+
     bug_context = format_bug_context(similar_bugs)
     task_context = format_task_context(similar_tasks)
     
@@ -438,9 +447,11 @@ def generate_chat_response(query: str, similar_bugs: list, similar_tasks: list, 
         project_context = f"Project Context:\nName: {project_details.get('name')}\nDescription: {project_details.get('description')}\n"
     
     prompt = f"""You are a helpful AI Assistant for a software development team.
-Your task is to answer the user's question based ONLY on the provided historical context and project context.
-If you don't know the answer based on the context, just say you don't have enough information.
-Keep your response concise and professional.
+Your task is to answer the user's question based on the provided project details, historical bugs, and tasks.
+- If the user is greeting you or being conversational, respond politely and offer assistance with bugs, tasks, or sprints.
+- If answering a question about the project, use the context provided below.
+- If the information is not in the context, concisely let the user know what project details are available or ask a clarifying question.
+Keep your response concise, helpful, and professional.
 
 {project_context}
 Historical Context (Similar Bugs):

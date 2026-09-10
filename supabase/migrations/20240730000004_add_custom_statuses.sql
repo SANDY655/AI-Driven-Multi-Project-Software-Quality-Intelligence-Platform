@@ -13,9 +13,15 @@ CREATE TABLE project_statuses (
 ALTER TABLE project_statuses ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view project statuses" ON project_statuses FOR SELECT 
-  USING (EXISTS (SELECT 1 FROM project_members WHERE project_members.project_id = project_statuses.project_id AND project_members.user_id = auth.uid()));
+  USING (
+    EXISTS (SELECT 1 FROM project_members WHERE project_members.project_id = project_statuses.project_id AND project_members.user_id = auth.uid())
+    OR EXISTS (SELECT 1 FROM projects WHERE projects.id = project_statuses.project_id AND projects.created_by = auth.uid())
+  );
 CREATE POLICY "Users can manage project statuses" ON project_statuses FOR ALL
-  USING (EXISTS (SELECT 1 FROM project_members WHERE project_members.project_id = project_statuses.project_id AND project_members.user_id = auth.uid()));
+  USING (
+    EXISTS (SELECT 1 FROM project_members WHERE project_members.project_id = project_statuses.project_id AND project_members.user_id = auth.uid())
+    OR EXISTS (SELECT 1 FROM projects WHERE projects.id = project_statuses.project_id AND projects.created_by = auth.uid())
+  );
 
 -- Insert default statuses for existing projects using a trigger
 CREATE OR REPLACE FUNCTION initialize_default_statuses()
@@ -28,7 +34,7 @@ BEGIN
         (NEW.id, 'done', 'bg-emerald-100 text-emerald-800', 3, TRUE);
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 CREATE TRIGGER on_project_created
     AFTER INSERT ON projects
